@@ -16,7 +16,7 @@
 `/var/lib/rw-node-installer/profile-values.txt` с mode `0600`; показать его один раз в TTY:
 
 ```bash
-sudo rw-node profile-guidance --show-private-key
+rw-node profile-guidance --show-private-key
 ```
 
 Не копируйте общий REALITY private key на весь парк. Список чужих доменов в `serverNames` не делает маскировку лучше: локальный Caddy должен иметь сертификат для каждого фактически используемого SNI. В базовой схеме он имеет сертификат только введённого домена.

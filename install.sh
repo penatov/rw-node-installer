@@ -3,7 +3,7 @@ set -Eeuo pipefail
 umask 027
 
 die() { printf '[x] %s\n' "$*" >&2; exit 1; }
-[[ ${EUID:-$(id -u)} -eq 0 ]] || die "Run as root: sudo bash install.sh"
+[[ ${EUID:-$(id -u)} -eq 0 ]] || die "Run from a root shell (for example: su -c 'bash install.sh')."
 
 script_dir=""
 if [[ ${BASH_SOURCE[0]} != /dev/fd/* && ${BASH_SOURCE[0]} != /proc/self/fd/* ]]; then
