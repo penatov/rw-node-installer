@@ -134,7 +134,7 @@ rw_resolve_pending_firewall_transaction() {
     unit=$(sed -n '1p' "$RW_FIREWALL_PENDING" 2>/dev/null || true)
     snapshot=$(sed -n '2p' "$RW_FIREWALL_PENDING" 2>/dev/null || true)
     [[ $unit =~ ^rw-node-firewall-rollback-[0-9]+-[0-9]+$ && \
-       $snapshot == /run/rw-node-firewall-before.*.nft && -e $snapshot ]] || \
+       $snapshot == "$RW_RUNTIME_DIR"/firewall-before.*.nft && -e $snapshot ]] || \
         rw_die "Повреждены метаданные незавершённой firewall-транзакции; используйте VNC и проверьте $RW_FIREWALL_PENDING."
     if systemctl is-active --quiet "${unit}.timer" "${unit}.service" 2>/dev/null; then
         rw_die "Предыдущая firewall-транзакция ещё ожидает rollback. Подождите три минуты, проверьте доступ через VNC и повторите установку."
@@ -158,6 +158,15 @@ rw_commit_firewall() {
     rw_atomic_install "$candidate" "$RW_FIREWALL_FILE" 0600 || return 1
     systemctl enable rw-node-firewall.service >/dev/null || return 1
     rw_install_firewall_dependencies || return 1
+    # The rules were applied transactionally above, but the oneshot unit must
+    # also be active before Docker/Caddy package hooks try to start services
+    # that Require it. Starting it here verifies the persistent boot path too.
+    if ! systemctl start rw-node-firewall.service >/dev/null; then
+        rw_error "Постоянный firewall unit не запустился:"
+        systemctl --no-pager --full status rw-node-firewall.service >&2 || true
+        journalctl -b --no-pager -n 80 -u rw-node-firewall.service >&2 || true
+        return 1
+    fi
     # The clean-host preflight rejected an active or enabled stock service.
     # Keep it disabled so it cannot later load a global `flush ruleset` file.
     systemctl disable nftables.service >/dev/null 2>&1 || true
@@ -165,18 +174,20 @@ rw_commit_firewall() {
 
 rw_apply_firewall_safely() {
     local candidate=$1 snapshot persistent_backup unit metadata_tmp answer
-    local was_enabled=false persistent_existed=false dependencies_existed=false
+    local was_enabled=false was_active=false persistent_existed=false dependencies_existed=false
     [[ -r $candidate ]] || rw_die "Не найден кандидат правил: $candidate"
+    install -d -m 0700 "$RW_RUNTIME_DIR"
     rw_resolve_pending_firewall_transaction
 
-    snapshot=$(mktemp /run/rw-node-firewall-before.XXXXXX.nft)
+    snapshot=$(mktemp "$RW_RUNTIME_DIR/firewall-before.XXXXXX.nft")
     if nft list table inet "$RW_FIREWALL_TABLE" >"$snapshot" 2>/dev/null; then
         chmod 0600 "$snapshot"
     else
         : >"$snapshot"
     fi
     systemctl is-enabled --quiet rw-node-firewall.service 2>/dev/null && was_enabled=true
-    persistent_backup=$(mktemp /run/rw-node-firewall-persistent.XXXXXX.nft)
+    systemctl is-active --quiet rw-node-firewall.service 2>/dev/null && was_active=true
+    persistent_backup=$(mktemp "$RW_RUNTIME_DIR/firewall-persistent.XXXXXX.nft")
     if [[ -r $RW_FIREWALL_FILE ]]; then
         cp -- "$RW_FIREWALL_FILE" "$persistent_backup"
         persistent_existed=true
@@ -187,7 +198,7 @@ rw_apply_firewall_safely() {
         dependencies_existed=true
     fi
     unit="rw-node-firewall-rollback-$(date +%s)-$$"
-    metadata_tmp=$(mktemp /run/rw-node-firewall-pending.XXXXXX)
+    metadata_tmp=$(mktemp "$RW_RUNTIME_DIR/firewall-pending.XXXXXX")
     printf '%s\n%s\n' "$unit" "$snapshot" >"$metadata_tmp"
     chmod 0600 "$metadata_tmp"
     mv -f "$metadata_tmp" "$RW_FIREWALL_PENDING"
@@ -195,6 +206,7 @@ rw_apply_firewall_safely() {
     if ! systemd-run --quiet --unit="$unit" --on-active=180s --timer-property=AccuracySec=1s \
         --property=NoNewPrivileges=yes --property=CapabilityBoundingSet=CAP_NET_ADMIN \
         --property=ProtectSystem=strict --property=ProtectHome=yes \
+        --property="ReadWritePaths=$RW_RUNTIME_DIR" \
         "$RW_INSTALL_DIR/scripts/rw-node-firewall-rollback" "$snapshot" "$RW_FIREWALL_PENDING"; then
         rm -f -- "$snapshot" "$persistent_backup" "$RW_FIREWALL_PENDING"
         rw_die "Не удалось запланировать безопасный rollback nftables."
@@ -231,6 +243,10 @@ rw_apply_firewall_safely() {
             rm -f -- "$RW_FIREWALL_FILE"
         fi
         [[ $was_enabled == true ]] || systemctl disable rw-node-firewall.service >/dev/null 2>&1 || true
+        if [[ $was_active != true ]]; then
+            systemctl stop rw-node-firewall.service >/dev/null 2>&1 || true
+            systemctl reset-failed rw-node-firewall.service >/dev/null 2>&1 || true
+        fi
         if [[ $dependencies_existed != true ]]; then
             rm -f /etc/systemd/system/docker.service.d/20-rw-node-firewall.conf \
                 /etc/systemd/system/caddy.service.d/20-rw-node-firewall.conf \

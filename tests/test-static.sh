@@ -59,6 +59,13 @@ ok "immutable remote bootstrap policy"
 
 grep -Fq 'admin off' src/lib/caddy.sh || fail "Caddy admin API is not disabled"
 grep -Fq 'ssh.service.d/20-rw-node-firewall.conf' src/lib/firewall.sh || fail "SSH lacks firewall dependency"
+grep -Fq 'systemctl start rw-node-firewall.service' src/lib/firewall.sh || fail "firewall unit is not activated before dependent services"
+grep -Fq 'RuntimeDirectory=rw-node-installer' src/systemd/rw-node-firewall.service || fail "firewall unit lacks a private runtime directory"
+grep -Fq 'ReadWritePaths=/run/rw-node-installer' src/systemd/rw-node-firewall.service || fail "firewall runtime directory is read-only"
+grep -Fq 'ReadWritePaths=$RW_RUNTIME_DIR' src/lib/firewall.sh || fail "rollback runtime directory is read-only"
+if grep -nE 'mktemp[[:space:]]+/run/' src/scripts/rw-node-firewall-*; then
+    fail "sandboxed runtime helper writes directly to read-only /run"
+fi
 grep -Fq -- '--show-private-key' src/bin/rw-node || fail "private key reveal is not explicit"
 ok "security boundary invariants"
 

@@ -27,6 +27,7 @@ export RW_CADDY_LOG_DIR="$TEMP_ROOT/var/log/caddy"
 export RW_INSTALL_DIR="$ROOT"
 export RW_SITE_GENERATOR="$ROOT/tools/site_generator.py"
 export RW_LOCK_FILE="$TEMP_ROOT/run/lock"
+export RW_RUNTIME_DIR="$TEMP_ROOT/run/rw-node-installer"
 
 # shellcheck source=../src/lib/common.sh
 source "$ROOT/src/lib/common.sh"
@@ -102,6 +103,19 @@ assert rw_validate_email ''
 assert rw_validate_secret '0123456789abcdef'
 ! rw_validate_secret short || fail "short secret accepted"
 printf 'OK: validators\n'
+
+dns_without_aaaa=$(
+    (
+        rw_resolve_v4() { printf '%s\n' 203.0.113.10; }
+        rw_resolve_v6() { return 0; }
+        rw_detect_public_v4() { printf '%s\n' 203.0.113.10; }
+        rw_detect_public_v6() { printf '%s\n' 2001:db8::10; }
+        rw_validate_dns node.example.com
+    ) 2>&1
+) || fail "DNS validation rejected an absent AAAA record"
+grep -Fq 'установка продолжится только с IPv4' <<<"$dns_without_aaaa" || \
+    fail "missing AAAA warning was not emitted"
+printf 'OK: IPv4-only DNS is non-fatal\n'
 
 export DOMAIN=node.example.com
 export PANEL_IP=203.0.113.10

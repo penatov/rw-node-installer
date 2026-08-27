@@ -13,10 +13,14 @@ ExecStart=/usr/local/lib/rw-node-installer/scripts/rw-node-firewall-apply
 ExecReload=/usr/local/lib/rw-node-installer/scripts/rw-node-firewall-apply
 RemainAfterExit=yes
 UMask=0077
+RuntimeDirectory=rw-node-installer
+RuntimeDirectoryMode=0700
+RuntimeDirectoryPreserve=yes
 NoNewPrivileges=yes
 CapabilityBoundingSet=CAP_NET_ADMIN
 ProtectSystem=strict
 ProtectHome=yes
+ReadWritePaths=/run/rw-node-installer
 
 [Install]
 WantedBy=network-pre.target

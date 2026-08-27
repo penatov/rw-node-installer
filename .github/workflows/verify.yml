@@ -33,6 +33,14 @@ jobs:
       - name: Validate nftables syntax
         run: sudo nft --check --file test-output/firewall.nft
 
+      - name: Exercise nftables idempotency in an isolated network namespace
+        run: |
+          sudo ip netns add rw-node-ci
+          trap 'sudo ip netns delete rw-node-ci' EXIT
+          sudo ip netns exec rw-node-ci src/scripts/rw-node-firewall-apply test-output/firewall.nft
+          sudo ip netns exec rw-node-ci src/scripts/rw-node-firewall-apply test-output/firewall.nft
+          sudo ip netns exec rw-node-ci nft list table inet rw_node_guard >/dev/null
+
       - name: Validate Caddyfile syntax
         run: |
           docker run --rm \

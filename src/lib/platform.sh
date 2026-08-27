@@ -71,7 +71,14 @@ rw_install_runtime_packages() {
     apt-get update
     apt-get install -y --no-install-recommends \
         docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin caddy
-    systemctl enable --now docker.service
+    if ! systemctl enable --now docker.service; then
+        rw_error "Docker не запустился; состояние firewall и сервисов:"
+        systemctl --no-pager --full status \
+            rw-node-firewall.service containerd.service docker.service >&2 || true
+        journalctl -b --no-pager -n 120 \
+            -u rw-node-firewall.service -u containerd.service -u docker.service >&2 || true
+        rw_die "Не удалось запустить docker.service. Диагностика напечатана выше."
+    fi
 }
 
 rw_configure_security_updates() {

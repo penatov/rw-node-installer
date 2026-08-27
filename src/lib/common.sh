@@ -17,12 +17,13 @@ RW_CADDYFILE="${RW_CADDYFILE:-/etc/caddy/Caddyfile}"
 RW_CADDY_STORAGE="${RW_CADDY_STORAGE:-/var/lib/caddy/rw-node-storage}"
 RW_CADDY_LOG_DIR="${RW_CADDY_LOG_DIR:-/var/log/caddy}"
 RW_LOCK_FILE="${RW_LOCK_FILE:-/run/lock/rw-node-installer.lock}"
+RW_RUNTIME_DIR="${RW_RUNTIME_DIR:-/run/rw-node-installer}"
 # shellcheck disable=SC2034 # consumed by other sourced modules
 RW_FIREWALL_TABLE="rw_node_guard"
 # shellcheck disable=SC2034 # consumed by other sourced modules
 RW_FIREWALL_FILE="${RW_CONFIG_DIR}/firewall.nft"
-RW_FIREWALL_CANDIDATE="${RW_FIREWALL_CANDIDATE:-/run/rw-node-firewall-candidate.nft}"
-RW_FIREWALL_PENDING="${RW_FIREWALL_PENDING:-/run/rw-node-firewall-pending}"
+RW_FIREWALL_CANDIDATE="${RW_FIREWALL_CANDIDATE:-${RW_RUNTIME_DIR}/firewall-candidate.nft}"
+RW_FIREWALL_PENDING="${RW_FIREWALL_PENDING:-${RW_RUNTIME_DIR}/firewall-pending}"
 RW_PROFILE_VALUES_FILE="${RW_PROFILE_VALUES_FILE:-${RW_STATE_DIR}/profile-values.txt}"
 RW_OWNER_MARKER="# Managed by rw-node-installer"
 
@@ -47,7 +48,7 @@ rw_die() { rw_error "$*"; exit 1; }
 rw_has() { command -v "$1" >/dev/null 2>&1; }
 
 rw_require_root() {
-    [[ ${EUID:-$(id -u)} -eq 0 ]] || rw_die "Запустите команду от root (sudo)."
+    [[ ${EUID:-$(id -u)} -eq 0 ]] || rw_die "Запустите команду из root-shell."
 }
 
 rw_tty_read() {

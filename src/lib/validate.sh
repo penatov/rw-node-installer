@@ -131,14 +131,12 @@ rw_validate_dns() {
     if [[ -n $public4 && -n $v4 ]] && ! grep -Fxq "$public4" <<<"$v4"; then
         rw_die "A-запись $domain не содержит публичный IPv4 этой машины ($public4)."
     fi
-    if [[ -n $public6 && -n $v6 ]] && ! grep -Fxiq "$public6" <<<"$v6"; then
-        rw_die "AAAA-запись $domain не содержит публичный IPv6 этой машины ($public6)."
-    fi
-    if [[ -z $public6 && -n $v6 ]]; then
+    if [[ -z $v6 ]]; then
+        rw_warn "У домена нет AAAA-записи; установка продолжится только с IPv4."
+    elif [[ -z $public6 ]]; then
         rw_die "У домена есть AAAA-запись, но исходящий IPv6 на сервере не работает."
-    fi
-    if [[ -n $public6 && -z $v6 ]]; then
-        rw_warn "Сервер имеет IPv6 ($public6), но домен не имеет AAAA-записи. IPv6-вход работать не будет."
+    elif ! grep -Fxiq "$public6" <<<"$v6"; then
+        rw_die "AAAA-запись $domain не содержит публичный IPv6 этой машины ($public6)."
     fi
     rw_info "DNS A: ${v4:-нет}; AAAA: ${v6:-нет}"
 }
