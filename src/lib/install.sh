@@ -91,12 +91,26 @@ rw_collect_install_inputs() {
 }
 
 rw_preflight_ports() {
-    local port owner
+    local port owner managed_node=false
+    if [[ -r $RW_CONFIG_FILE ]] && rw_has docker && \
+       [[ $(docker inspect --format '{{.State.Running}} {{.HostConfig.NetworkMode}}' \
+            remnanode 2>/dev/null || true) == 'true host' ]]; then
+        managed_node=true
+    fi
     for port in 80 443 8443 "$NODE_PORT"; do
         owner=$(ss -H -lntup "( sport = :${port} )" 2>/dev/null || true)
         [[ -z $owner ]] && continue
-        if grep -Eq 'caddy|xray|remnanode|docker-proxy' <<<"$owner" && [[ -r $RW_CONFIG_FILE ]]; then
-            continue
+        if [[ -r $RW_CONFIG_FILE ]]; then
+            if grep -Eq 'caddy|xray|remnanode|docker-proxy' <<<"$owner"; then
+                continue
+            fi
+            # With host networking, ss reports the application process
+            # (normally "node"), not the Docker container name. Trust this
+            # occupied management port only after verifying the exact managed
+            # container is running in the expected network mode.
+            if [[ $managed_node == true && $port == "$NODE_PORT" ]]; then
+                continue
+            fi
         fi
         rw_die "Порт $port уже занят сторонним процессом: $owner"
     done

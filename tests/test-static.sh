@@ -67,6 +67,8 @@ grep -Fq 'protocols h1 h2' src/lib/caddy.sh || fail "loopback Caddy unnecessaril
 grep -Fq -- '-Alt-Svc' src/lib/caddy.sh || fail "internal Caddy port may leak through Alt-Svc"
 grep -Fq -- '-Server' src/lib/caddy.sh || fail "Caddy product header is exposed"
 grep -Fq 'DPkg::Lock::Timeout=' src/lib/platform.sh || fail "APT does not wait for dpkg locks"
+grep -Fq "'{{.State.Running}} {{.HostConfig.NetworkMode}}'" src/lib/install.sh || \
+    fail "reinstall preflight does not verify the managed host-network container"
 if grep -RInE 'rm[[:space:]].*(/var/lib/dpkg|/var/lib/apt).*(lock|lock-frontend)' src install.sh; then
     fail "package manager lock files must never be deleted"
 fi

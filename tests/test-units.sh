@@ -153,6 +153,22 @@ assert test "$DOMAIN" = node.example.com
 assert test "$PANEL_IP" = 203.0.113.10
 printf 'OK: config round-trip\n'
 
+ss() {
+    [[ $* == *':2222'* ]] && printf '%s\n' \
+        'tcp LISTEN 0 4096 0.0.0.0:2222 0.0.0.0:* users:(("node",pid=123,fd=20))'
+    return 0
+}
+docker() {
+    [[ $* == *'inspect'* ]] && printf '%s\n' 'true host'
+}
+rw_preflight_ports
+docker() { return 1; }
+if (rw_preflight_ports) >/dev/null 2>&1; then
+    fail "unmanaged node process on 2222 was accepted"
+fi
+unset -f ss docker
+printf 'OK: idempotent managed-port preflight\n'
+
 rw_render_firewall
 assert_file_contains "$RW_FIREWALL_FILE" 'table inet rw_node_guard {'
 assert_file_contains "$RW_FIREWALL_FILE" 'elements = { 203.0.113.10 }'
