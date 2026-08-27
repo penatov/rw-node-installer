@@ -1,5 +1,9 @@
 # rw-node-installer
 
+[![verify](https://github.com/penatov/rw-node-installer/actions/workflows/verify.yml/badge.svg)](https://github.com/penatov/rw-node-installer/actions/workflows/verify.yml)
+[![Debian 12/13](https://img.shields.io/badge/Debian-12%20%7C%2013-A81D33?logo=debian&logoColor=white)](https://www.debian.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 Интерактивный установщик Remnawave Node для **чистой Debian 12 или 13**. Он разворачивает Node в Docker, локальный self-steal-сайт на Caddy, сертификаты для Hysteria2, постоянный nftables firewall, адаптивный сетевой тюнинг и обновление образа `remnawave/node:latest` с health-check и автоматическим откатом.
 
 Проект рассчитан на профиль с двумя публичными inbound на одном адресе:
@@ -14,7 +18,7 @@
 - официальный Docker Engine и Compose plugin;
 - официальный стабильный Caddy;
 - `remnawave/node:latest` в host network с `NET_ADMIN` для Node Plugins;
-- уникальный сайт из `run.py`, локальные WOFF2-шрифты без Google Fonts;
+- уникальный сайт из `tools/site_generator.py`, локальные WOFF2-шрифты без Google Fonts;
 - сертификат ACME HTTP-01 на Caddy и его безопасная копия в `/etc/ssl/hysteria`;
 - отдельная таблица `inet rw_node_guard`, не удаляющая таблицы Remnawave Plugins;
 - SSH `22/tcp` только от IP панели и списка администраторов;
@@ -24,6 +28,23 @@
 - BBR+fq при наличии в ядре, безопасные sysctl, лимиты журналов и осторожный NIC/RPS-тюнинг;
 - ежедневная проверка `latest`, health-check и возврат к последнему рабочему image digest;
 - security-only unattended upgrades без автоматической перезагрузки.
+
+## Структура репозитория
+
+```text
+rw-node-installer/
+├── src/                 runtime: CLI, shell-модули, systemd units и служебные scripts
+├── tools/               генератор уникального одностраничного сайта
+├── assets/              локальные шрифты и статические файлы сайта
+├── docs/                архитектура, эксплуатация и рекомендации профиля
+├── tests/               статические и unit-проверки
+├── .github/workflows/   Linux CI
+└── install.sh           минимальный локальный/удалённый bootstrap
+```
+
+В корне оставлены только файлы, которые обычно ожидаются у GitHub-проекта. Содержимое
+`src/` при установке собирается в `/usr/local/lib/rw-node-installer`; структура репозитория
+не становится частью публичного API ноды.
 
 ## Перед установкой
 
@@ -39,11 +60,11 @@
 
 ## Установка
 
-После публикации замените URL и подставьте полный commit SHA, которому доверяете. И bootstrap,
-и архив загружаются из одного неизменяемого commit; имя ветки установщик намеренно не принимает:
+Подставьте полный commit SHA, которому доверяете. И bootstrap, и архив загружаются из одного
+неизменяемого commit; имя ветки установщик намеренно не принимает:
 
 ```bash
-COMMIT_SHA=0123456789abcdef0123456789abcdef01234567; apt-get update && apt-get install -y ca-certificates curl tar && curl -fsSL "https://raw.githubusercontent.com/USER/REPOSITORY/${COMMIT_SHA}/install.sh" | sudo env RW_INSTALLER_REPO=https://github.com/USER/REPOSITORY RW_INSTALLER_REF="$COMMIT_SHA" bash
+COMMIT_SHA=0123456789abcdef0123456789abcdef01234567; apt-get update && apt-get install -y ca-certificates curl tar && curl -fsSL "https://raw.githubusercontent.com/penatov/rw-node-installer/${COMMIT_SHA}/install.sh" | sudo env RW_INSTALLER_REPO=https://github.com/penatov/rw-node-installer RW_INSTALLER_REF="$COMMIT_SHA" bash
 ```
 
 Из локального клона:
@@ -98,7 +119,7 @@ nftables надёжно скрывает административные пор
 ```bash
 bash tests/test-static.sh
 bash tests/test-units.sh
-python3 run.py --audit 100 --seed repository-audit
+python3 tools/site_generator.py --audit 100 --seed repository-audit
 ```
 
 GitHub Actions дополнительно запускает ShellCheck, синтаксическую проверку nftables, адаптацию Caddyfile и `docker compose config`.

@@ -23,7 +23,7 @@ jobs:
       - name: Static and generator checks
         run: |
           bash tests/test-static.sh
-          python3 run.py --audit 100 --seed repository-audit
+          python3 tools/site_generator.py --audit 100 --seed repository-audit
 
       - name: Render configurations
         env:

@@ -1,17 +1,28 @@
 #!/usr/bin/env bash
 
 rw_install_bundle() {
-    local source_root=$1 staging old
-    staging=$(mktemp -d /usr/local/lib/.rw-node-installer.XXXXXX)
+    local source_root=$1 runtime_source generator staging old
+    local staging_parent=${RW_INSTALL_STAGING_PARENT:-/usr/local/lib}
+    local sbin_dir=${RW_SBIN_DIR:-/usr/local/sbin}
+    if [[ -d $source_root/src/lib ]]; then
+        runtime_source=$source_root/src
+        generator=$source_root/tools/site_generator.py
+    else
+        runtime_source=$source_root
+        generator=$source_root/site_generator.py
+    fi
+    [[ -r $runtime_source/lib/common.sh && -r $generator ]] || \
+        rw_die "Неполный source bundle: $source_root"
+    staging=$(mktemp -d "$staging_parent/.rw-node-installer.XXXXXX")
     install -d -m 0755 "$staging"/{bin,lib,scripts,systemd,assets/site,assets/fonts,docs}
-    cp -a "$source_root/bin/." "$staging/bin/"
-    cp -a "$source_root/lib/." "$staging/lib/"
-    cp -a "$source_root/scripts/." "$staging/scripts/"
-    cp -a "$source_root/systemd/." "$staging/systemd/"
+    cp -a "$runtime_source/bin/." "$staging/bin/"
+    cp -a "$runtime_source/lib/." "$staging/lib/"
+    cp -a "$runtime_source/scripts/." "$staging/scripts/"
+    cp -a "$runtime_source/systemd/." "$staging/systemd/"
     cp -a "$source_root/assets/site/." "$staging/assets/site/"
     cp -a "$source_root/assets/fonts/." "$staging/assets/fonts/"
     cp -a "$source_root/docs/." "$staging/docs/" 2>/dev/null || true
-    install -m 0644 "$source_root/run.py" "$staging/run.py"
+    install -m 0644 "$generator" "$staging/site_generator.py"
     install -m 0644 "$source_root/VERSION" "$staging/VERSION"
     chmod 0755 "$staging/bin/rw-node" "$staging"/scripts/*
 
@@ -20,7 +31,7 @@ rw_install_bundle() {
     if [[ -d $RW_INSTALL_DIR ]]; then mv "$RW_INSTALL_DIR" "$old"; fi
     mv "$staging" "$RW_INSTALL_DIR"
     rm -rf -- "$old"
-    install -m 0755 "$RW_INSTALL_DIR/bin/rw-node" /usr/local/sbin/rw-node
+    install -m 0755 "$RW_INSTALL_DIR/bin/rw-node" "$sbin_dir/rw-node"
 }
 
 rw_collect_install_inputs() {

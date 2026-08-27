@@ -4,18 +4,24 @@ umask 027
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
 if [[ -r "$SCRIPT_DIR/../lib/common.sh" ]]; then
-    RW_SOURCE_ROOT=$(cd "$SCRIPT_DIR/.." && pwd -P)
+    RW_RUNTIME_SOURCE=$(cd "$SCRIPT_DIR/.." && pwd -P)
+    if [[ -r "$RW_RUNTIME_SOURCE/../VERSION" && -d "$RW_RUNTIME_SOURCE/../assets" ]]; then
+        RW_SOURCE_ROOT=$(cd "$RW_RUNTIME_SOURCE/.." && pwd -P)
+    else
+        RW_SOURCE_ROOT=$RW_RUNTIME_SOURCE
+    fi
 else
+    RW_RUNTIME_SOURCE=/usr/local/lib/rw-node-installer
     RW_SOURCE_ROOT=/usr/local/lib/rw-node-installer
 fi
 
 # shellcheck source=../lib/common.sh
-source "$RW_SOURCE_ROOT/lib/common.sh"
+source "$RW_RUNTIME_SOURCE/lib/common.sh"
 RW_VERSION=$(<"$RW_SOURCE_ROOT/VERSION")
 export RW_VERSION
 for library in validate platform firewall site caddy remnawave tuning diagnose uninstall install; do
     # shellcheck disable=SC1090
-    source "$RW_SOURCE_ROOT/lib/${library}.sh"
+    source "$RW_RUNTIME_SOURCE/lib/${library}.sh"
 done
 
 rw_usage() {

@@ -25,18 +25,31 @@ export RW_CADDYFILE="$TEMP_ROOT/etc/caddy/Caddyfile"
 export RW_CADDY_STORAGE="$TEMP_ROOT/var/lib/caddy/storage"
 export RW_CADDY_LOG_DIR="$TEMP_ROOT/var/log/caddy"
 export RW_INSTALL_DIR="$ROOT"
+export RW_SITE_GENERATOR="$ROOT/tools/site_generator.py"
 export RW_LOCK_FILE="$TEMP_ROOT/run/lock"
 
-# shellcheck source=../lib/common.sh
-source "$ROOT/lib/common.sh"
-for library in validate firewall site caddy remnawave; do
+# shellcheck source=../src/lib/common.sh
+source "$ROOT/src/lib/common.sh"
+for library in validate firewall site caddy remnawave install; do
     # shellcheck disable=SC1090
-    source "$ROOT/lib/${library}.sh"
+    source "$ROOT/src/lib/${library}.sh"
 done
 
 # Rendering functions chown root in production. Ownership is outside these unit
 # tests; root-mode integration checks run during a real Debian installation.
 chown() { :; }
+if (( EUID != 0 )) && [[ ${OSTYPE:-} != msys* && ${OSTYPE:-} != cygwin* ]]; then
+    install() {
+        local -a arguments=()
+        while (($#)); do
+            case "$1" in
+                -o|-g) shift 2 ;;
+                *) arguments+=("$1"); shift ;;
+            esac
+        done
+        command install "${arguments[@]}"
+    }
+fi
 case ${OSTYPE:-} in
     msys*|cygwin*)
         install() {
@@ -143,6 +156,19 @@ assert_file_contains "$RW_PROJECT_DIR/docker-compose.yml" 'image: remnawave/node
 assert_file_contains "$RW_PROJECT_DIR/docker-compose.yml" 'no-new-privileges:true'
 assert_file_contains "$RW_PROJECT_DIR/docker-compose.yml" 'node.example.com:127.0.0.1'
 printf 'OK: Compose rendering and raw secret preservation\n'
+
+RW_INSTALL_DIR="$TEMP_ROOT/installed-bundle"
+RW_INSTALL_STAGING_PARENT="$TEMP_ROOT/staging"
+RW_SBIN_DIR="$TEMP_ROOT/sbin"
+mkdir -p "$RW_INSTALL_STAGING_PARENT" "$RW_SBIN_DIR"
+rw_install_bundle "$ROOT"
+assert test -x "$RW_INSTALL_DIR/bin/rw-node"
+assert test -r "$RW_INSTALL_DIR/lib/common.sh"
+assert test -x "$RW_INSTALL_DIR/scripts/rw-node-healthcheck"
+assert test -r "$RW_INSTALL_DIR/systemd/rw-node-firewall.service"
+assert test -r "$RW_INSTALL_DIR/site_generator.py"
+assert test -x "$RW_SBIN_DIR/rw-node"
+printf 'OK: repository-to-runtime bundle layout\n'
 
 if [[ -n ${RW_TEST_OUTPUT:-} ]]; then
     mkdir -p "$RW_TEST_OUTPUT"

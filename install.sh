@@ -9,8 +9,8 @@ script_dir=""
 if [[ ${BASH_SOURCE[0]} != /dev/fd/* && ${BASH_SOURCE[0]} != /proc/self/fd/* ]]; then
     script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd -P || true)
 fi
-if [[ -n $script_dir && -x $script_dir/bin/rw-node && -r $script_dir/lib/common.sh ]]; then
-    exec "$script_dir/bin/rw-node" install "$@"
+if [[ -n $script_dir && -x $script_dir/src/bin/rw-node && -r $script_dir/src/lib/common.sh ]]; then
+    exec "$script_dir/src/bin/rw-node" install "$@"
 fi
 
 repo=${RW_INSTALLER_REPO:-}
@@ -35,8 +35,8 @@ if [[ -n ${RW_INSTALLER_SHA256:-} ]]; then
 fi
 mkdir "$tmp_dir/source"
 tar -xzf "$archive" --strip-components=1 -C "$tmp_dir/source"
-[[ -x $tmp_dir/source/bin/rw-node ]] || chmod +x "$tmp_dir/source/bin/rw-node"
+[[ -x $tmp_dir/source/src/bin/rw-node ]] || chmod +x "$tmp_dir/source/src/bin/rw-node"
 
 export RW_INSTALLER_REPO="$repo"
 export RW_INSTALLER_REF="$ref"
-"$tmp_dir/source/bin/rw-node" install "$@"
+"$tmp_dir/source/src/bin/rw-node" install "$@"

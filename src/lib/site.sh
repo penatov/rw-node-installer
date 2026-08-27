@@ -8,7 +8,8 @@ rw_generate_site() {
     if [[ $force == true || ! -s $output ]]; then
         tmp=$(mktemp "${RW_SITE_DIR}/.index.XXXXXX")
         rw_log "Генерирую уникальный сайт (seed: $SITE_SEED)..."
-        python3 "$RW_INSTALL_DIR/run.py" --seed "$SITE_SEED" --output "$tmp" --quiet
+        python3 "${RW_SITE_GENERATOR:-$RW_INSTALL_DIR/site_generator.py}" \
+            --seed "$SITE_SEED" --output "$tmp" --quiet
         install -m 0644 "$tmp" "$output"
         rm -f "$tmp"
     fi

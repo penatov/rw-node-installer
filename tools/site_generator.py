@@ -2,13 +2,13 @@
 """Procedural generator of long-form Russian one-page websites.
 
 Ordinary usage:
-    python run.py
+    python tools/site_generator.py
 
 Reproducible generation:
-    python run.py --seed 12345
+    python tools/site_generator.py --seed 12345
 
 Internal diversity/validity audit:
-    python run.py --audit 100
+    python tools/site_generator.py --audit 100
 
 The script uses only the Python standard library and always writes a single
 self-contained HTML document. The generated page contains no JavaScript.
@@ -5791,7 +5791,7 @@ def build_argument_parser() -> argparse.ArgumentParser:
         "--output",
         type=Path,
         default=None,
-        help="Путь к HTML. По умолчанию: index.html рядом с run.py.",
+        help="Путь к HTML. По умолчанию: index.html рядом с site_generator.py.",
     )
     parser.add_argument(
         "--audit",
