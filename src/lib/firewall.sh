@@ -79,13 +79,6 @@ rw_render_firewall() {
         counter drop
     }
 
-    chain forward {
-        type filter hook forward priority filter; policy drop;
-        ct state invalid counter drop
-        ct state { established, related } counter accept
-        counter drop
-    }
-
     chain output {
         type filter hook output priority filter; policy accept;
     }

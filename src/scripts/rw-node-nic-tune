@@ -32,8 +32,8 @@ for interface in "${interfaces[@]}"; do
         per_queue=$((32768 / queue_count))
         (( per_queue < 4096 )) && per_queue=4096
         for queue in "${queues[@]}"; do
-            [[ -w $queue/rps_cpus ]] && printf '%s' "$mask" >"$queue/rps_cpus"
-            [[ -w $queue/rps_flow_cnt ]] && printf '%s' "$per_queue" >"$queue/rps_flow_cnt"
+            [[ ! -w $queue/rps_cpus ]] || printf '%s' "$mask" >"$queue/rps_cpus" 2>/dev/null || true
+            [[ ! -w $queue/rps_flow_cnt ]] || printf '%s' "$per_queue" >"$queue/rps_flow_cnt" 2>/dev/null || true
         done
     fi
 done

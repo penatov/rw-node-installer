@@ -39,7 +39,15 @@ systemctl list-timers rw-node-cert-sync.timer
 openssl x509 -in /etc/ssl/hysteria/fullchain.pem -noout -subject -issuer -dates
 ```
 
-Если выпуск не удался, проверьте A/AAAA, внешний firewall и TCP 80, затем `journalctl -u caddy -n 100`.
+Если выпуск не удался, проверьте A/AAAA, внешний firewall и TCP 80, затем:
+
+```bash
+systemctl status caddy.service rw-node-firewall.service --no-pager -l
+journalctl -b -u caddy.service --no-pager -n 150
+rw-node cert-sync
+```
+
+Отсутствие AAAA само по себе не является ошибкой: такая нода работает только по IPv4.
 
 ## Изменение allowlist
 

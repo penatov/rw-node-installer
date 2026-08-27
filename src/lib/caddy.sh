@@ -1,10 +1,16 @@
 #!/usr/bin/env bash
 
 rw_render_caddyfile() {
-    local file=$RW_CADDYFILE email_line tmp
+    local file=$RW_CADDYFILE email_line tmp public_bind loopback_bind
     rw_backup_file "$file"
     email_line=""
     [[ -n ${ACME_EMAIL:-} ]] && email_line="    email \"${ACME_EMAIL}\""
+    public_bind="0.0.0.0"
+    loopback_bind="127.0.0.1"
+    if rw_ipv6_loopback_available; then
+        public_bind+=" ::"
+        loopback_bind+=" ::1"
+    fi
     tmp=$(rw_mktemp_near "$file")
     cat >"$tmp" <<EOF
 ${RW_OWNER_MARKER}
@@ -19,12 +25,12 @@ ${email_line}
 }
 
 http:// {
-    bind 0.0.0.0 ::
+    bind ${public_bind}
     redir https://${DOMAIN}{uri} 308
 }
 
 https://${DOMAIN}:8443 {
-    bind 127.0.0.1 ::1
+    bind ${loopback_bind}
 
     tls {
         issuer acme {
@@ -73,15 +79,55 @@ rw_install_cert_sync_units() {
     systemctl enable rw-node-cert-sync.timer >/dev/null
 }
 
-rw_caddy_configure() {
+rw_prepare_caddy_runtime() {
+    local access_log="${RW_CADDY_LOG_DIR}/rw-node-access.log" caddy_owner
+    [[ ! -L $RW_CADDY_LOG_DIR ]] || rw_die "Каталог логов Caddy не может быть symlink: $RW_CADDY_LOG_DIR"
+    [[ ! -L $RW_CADDY_STORAGE ]] || rw_die "Storage Caddy не может быть symlink: $RW_CADDY_STORAGE"
     install -d -m 0750 -o caddy -g caddy "$RW_CADDY_LOG_DIR"
     install -d -m 0700 -o caddy -g caddy "$RW_CADDY_STORAGE"
+
+    # Older installer revisions validated Caddy as root and therefore created
+    # this 0640 file as root:root. Remove only that managed path so validation
+    # under the real service identity can recreate it with correct ownership.
+    if [[ -L $access_log ]]; then
+        rm -f -- "$access_log"
+    elif [[ -e $access_log ]]; then
+        [[ -f $access_log ]] || rw_die "Ожидался обычный файл лога: $access_log"
+        caddy_owner="$(id -u caddy):$(id -g caddy)"
+        if [[ $(stat -c '%u:%g' -- "$access_log") != "$caddy_owner" ]]; then
+            rw_warn "Исправляю владельца ранее созданного Caddy access log."
+            rm -f -- "$access_log"
+        else
+            chmod 0640 "$access_log"
+        fi
+    fi
+}
+
+rw_caddy_diagnostics() {
+    systemctl --no-pager --full status caddy.service rw-node-firewall.service >&2 || true
+    journalctl -b -u caddy.service --no-pager -n 120 | rw_redact >&2 || true
+}
+
+rw_caddy_configure() {
+    rw_prepare_caddy_runtime
     rw_render_caddyfile
     caddy fmt --overwrite "$RW_CADDYFILE"
-    caddy validate --config "$RW_CADDYFILE" --adapter caddyfile
+    chmod 0644 "$RW_CADDYFILE"
+    if ! runuser -u caddy -- env HOME=/var/lib/caddy \
+        XDG_DATA_HOME=/var/lib/caddy/.local/share \
+        XDG_CONFIG_HOME=/var/lib/caddy/.config \
+        /usr/bin/caddy validate --config "$RW_CADDYFILE" --adapter caddyfile; then
+        rw_die "Caddyfile не прошёл проверку от пользователя caddy."
+    fi
     systemctl enable caddy.service >/dev/null
-    systemctl restart caddy.service
-    rw_wait_until 30 2 "Caddy не стал active" systemctl is-active --quiet caddy.service
+    if ! systemctl restart caddy.service; then
+        rw_caddy_diagnostics
+        rw_die "Не удалось перезапустить caddy.service."
+    fi
+    if ! rw_wait_until 30 2 "Caddy не стал active" systemctl is-active --quiet caddy.service; then
+        rw_caddy_diagnostics
+        rw_die "caddy.service завершился после запуска."
+    fi
 }
 
 rw_caddy_wait_for_certificate() {

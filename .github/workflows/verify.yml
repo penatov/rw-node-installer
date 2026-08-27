@@ -9,6 +9,31 @@ permissions:
   contents: read
 
 jobs:
+  debian-compatibility:
+    name: Debian ${{ matrix.release }} compatibility
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        release: ['12', '13']
+    container: debian:${{ matrix.release }}-slim
+    steps:
+      - name: Install test dependencies
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            bash ca-certificates coreutils findutils git grep openssl passwd \
+            python3 sed shellcheck util-linux
+
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Run Debian compatibility checks
+        run: |
+          bash tests/test-static.sh
+          bash tests/test-units.sh
+          bash tests/test-linux-integration.sh
+
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -41,9 +66,27 @@ jobs:
           sudo ip netns exec rw-node-ci src/scripts/rw-node-firewall-apply test-output/firewall.nft
           sudo ip netns exec rw-node-ci nft list table inet rw_node_guard >/dev/null
 
+      - name: Exercise nftables rollback helper in an isolated network namespace
+        run: |
+          sudo ip netns add rw-node-rollback-ci
+          trap 'sudo ip netns delete rw-node-rollback-ci' EXIT
+          sudo install -d -m 0700 /run/rw-node-installer
+          sudo touch /run/rw-node-installer/firewall-before.ci.nft
+          sudo touch /run/rw-node-installer/firewall-pending
+          sudo ip netns exec rw-node-rollback-ci src/scripts/rw-node-firewall-apply test-output/firewall.nft
+          sudo ip netns exec rw-node-rollback-ci src/scripts/rw-node-firewall-rollback \
+            /run/rw-node-installer/firewall-before.ci.nft \
+            /run/rw-node-installer/firewall-pending
+          if sudo ip netns exec rw-node-rollback-ci nft list table inet rw_node_guard >/dev/null 2>&1; then
+            echo 'Rollback did not remove the test table.' >&2
+            exit 1
+          fi
+
       - name: Validate Caddyfile syntax
         run: |
           docker run --rm \
+            --user 10001:10001 \
+            --env HOME=/tmp/caddy-home \
             -v "$PWD/test-output/Caddyfile:/etc/caddy/Caddyfile:ro" \
             caddy:2.11.4@sha256:df7f1c2fb114453b951de51a98efc010db1655a92c2e86be6706714e2417a78d \
             caddy adapt --config /etc/caddy/Caddyfile --adapter caddyfile --validate
@@ -51,3 +94,6 @@ jobs:
       - name: Validate Docker Compose model
         working-directory: test-output
         run: docker compose config --quiet
+
+      - name: Exercise certificate synchronization boundary
+        run: sudo bash tests/test-linux-integration.sh

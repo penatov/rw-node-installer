@@ -99,17 +99,44 @@ rw_validate_email() {
 }
 
 rw_validate_secret() {
-    local secret=$1
-    [[ ${#secret} -ge 16 ]] || return 1
-    [[ $secret != *$'\n'* && $secret != *$'\r'* ]]
+    python3 - "$1" <<'PY'
+import base64
+import binascii
+import json
+import sys
+
+value = sys.argv[1]
+if len(value) < 16 or "\n" in value or "\r" in value:
+    raise SystemExit(1)
+try:
+    padded = value + "=" * (-len(value) % 4)
+    payload = json.loads(base64.b64decode(padded, altchars=b"-_", validate=True).decode("utf-8"))
+except (ValueError, binascii.Error, UnicodeDecodeError, json.JSONDecodeError):
+    raise SystemExit(1)
+required = ("caCertPem", "jwtPublicKey", "nodeCertPem", "nodeKeyPem")
+if not isinstance(payload, dict) or any(not isinstance(payload.get(key), str) or not payload[key].strip() for key in required):
+    raise SystemExit(1)
+PY
 }
 
 rw_resolve_v4() {
-    getent ahostsv4 "$1" 2>/dev/null | awk '$2 == "STREAM" {print $1}' | sort -u
+    dig +time=3 +tries=2 +short A "$1" 2>/dev/null | \
+        awk '/^([0-9]{1,3}\.){3}[0-9]{1,3}$/ {print}' | sort -u
 }
 
 rw_resolve_v6() {
-    getent ahostsv6 "$1" 2>/dev/null | awk '$2 == "STREAM" {print $1}' | sort -u
+    # Query AAAA explicitly. getent ahostsv6 may synthesize IPv4-mapped
+    # addresses on some libc/NSS configurations, incorrectly implying AAAA.
+    dig +time=3 +tries=2 +short AAAA "$1" 2>/dev/null | \
+        awk 'index($0, ":") {print tolower($0)}' | sort -u
+}
+
+rw_ipv6_loopback_available() {
+    case ${RW_TEST_IPV6_AVAILABLE:-auto} in
+        true) return 0 ;;
+        false) return 1 ;;
+    esac
+    [[ -r /proc/net/if_inet6 ]] && grep -Eqi '^0{31}1[[:space:]]' /proc/net/if_inet6
 }
 
 rw_detect_public_v4() {

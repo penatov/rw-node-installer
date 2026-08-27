@@ -52,7 +52,10 @@ rw_configure_modules() {
         modinfo sch_fq >/dev/null 2>&1 && printf 'sch_fq\n'
         modinfo tcp_bbr >/dev/null 2>&1 && printf 'tcp_bbr\n'
     } >"${file}.tmp"
-    rw_atomic_install "${file}.tmp" "$file" 0644
+    if ! rw_atomic_install "${file}.tmp" "$file" 0644; then
+        rm -f "${file}.tmp"
+        return 1
+    fi
     rm -f "${file}.tmp"
 }
 
@@ -93,9 +96,14 @@ rw_render_sysctl() {
         rw_sysctl_line vm.swappiness 10
         rw_sysctl_line vm.vfs_cache_pressure 50
     } >"${file}.tmp"
-    rw_atomic_install "${file}.tmp" "$file" 0644
+    if ! rw_atomic_install "${file}.tmp" "$file" 0644; then
+        rm -f "${file}.tmp"
+        return 1
+    fi
     rm -f "${file}.tmp"
-    sysctl --load "$file"
+    if ! sysctl --load "$file"; then
+        rw_warn "Часть sysctl отклонена ядром/гипервизором; установка продолжится с поддержанными параметрами."
+    fi
 }
 
 rw_configure_swap() {
@@ -118,12 +126,19 @@ rw_configure_swap() {
         return 0
     fi
     rw_log "Создаю ${size_mb} MiB swapfile (существующий swap отсутствует)..."
-    if ! fallocate -l "${size_mb}M" "$swap_file" 2>/dev/null; then
-        dd if=/dev/zero of="$swap_file" bs=1M count="$size_mb" status=progress
+    if ! fallocate -l "${size_mb}M" "$swap_file" 2>/dev/null && \
+       ! dd if=/dev/zero of="$swap_file" bs=1M count="$size_mb" status=progress; then
+        rm -f -- "$swap_file"
+        rw_warn "Не удалось создать swapfile; установка продолжится без swap."
+        return 0
     fi
     chmod 0600 "$swap_file"
-    mkswap "$swap_file" >/dev/null
-    swapon "$swap_file"
+    if ! mkswap "$swap_file" >/dev/null || ! swapon "$swap_file"; then
+        swapoff "$swap_file" >/dev/null 2>&1 || true
+        rm -f -- "$swap_file"
+        rw_warn "Гипервизор не разрешил активировать swapfile; установка продолжится без swap."
+        return 0
+    fi
     if ! grep -Eq '^/swapfile[[:space:]]' "$fstab"; then
         rw_backup_file "$fstab"
         printf '/swapfile none swap sw 0 0\n' >>"$fstab"
@@ -144,9 +159,12 @@ RateLimitIntervalSec=30s
 RateLimitBurst=10000
 Compress=yes
 EOF
-    rw_atomic_install "${file}.tmp" "$file" 0644
+    if ! rw_atomic_install "${file}.tmp" "$file" 0644; then
+        rm -f "${file}.tmp"
+        return 1
+    fi
     rm -f "${file}.tmp"
-    systemctl restart systemd-journald.service
+    systemctl restart systemd-journald.service || return 1
 }
 
 rw_configure_ssh_safely() {
@@ -177,18 +195,18 @@ EOF
 
 rw_install_nic_tuning() {
     rw_atomic_install "$RW_INSTALL_DIR/systemd/rw-node-nic-tune.service" \
-        /etc/systemd/system/rw-node-nic-tune.service 0644
-    systemctl daemon-reload
-    systemctl enable --now rw-node-nic-tune.service >/dev/null
+        /etc/systemd/system/rw-node-nic-tune.service 0644 || return 1
+    systemctl daemon-reload || return 1
+    systemctl enable --now rw-node-nic-tune.service >/dev/null || return 1
 }
 
 rw_configure_tuning() {
     rw_detect_tuning_profile
     rw_log "Профиль производительности: $RW_TUNING_PROFILE (${RW_CPU_COUNT} CPU, ${RW_MEMORY_MB} MiB RAM)."
-    rw_configure_modules
+    rw_configure_modules || rw_warn "Не удалось сохранить список модулей BBR/fq; продолжаю без автозагрузки."
     rw_render_sysctl
     rw_configure_swap
-    rw_configure_journald
+    rw_configure_journald || rw_warn "Не удалось применить ограничения journald; установка продолжается."
     rw_configure_ssh_safely
-    rw_install_nic_tuning
+    rw_install_nic_tuning || rw_warn "NIC/RPS tuning не применён; это не влияет на корректность ноды."
 }

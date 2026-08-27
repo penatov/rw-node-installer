@@ -77,7 +77,7 @@ rw_collect_install_inputs() {
     fi
 
     rw_validate_domain "$DOMAIN" || rw_die "Некорректный домен: $DOMAIN"
-    rw_validate_secret "$SECRET_KEY" || rw_die "SECRET_KEY должен быть одной строкой длиной не менее 16 символов."
+    rw_validate_secret "$SECRET_KEY" || rw_die "SECRET_KEY не является корректным payload Remnawave Node. Скопируйте ключ из панели полностью."
     rw_validate_single_ip "$PANEL_IP" || rw_die "IP панели должен быть одним IPv4 или IPv6 адресом без CIDR."
     ADMIN_IPS=$(rw_normalize_ip_list "$ADMIN_IPS") || rw_die "Некорректный список административных IP."
     if rw_ip_list_has_world "$ADMIN_IPS"; then

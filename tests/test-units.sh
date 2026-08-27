@@ -28,6 +28,7 @@ export RW_INSTALL_DIR="$ROOT"
 export RW_SITE_GENERATOR="$ROOT/tools/site_generator.py"
 export RW_LOCK_FILE="$TEMP_ROOT/run/lock"
 export RW_RUNTIME_DIR="$TEMP_ROOT/run/rw-node-installer"
+export RW_TEST_IPV6_AVAILABLE=true
 
 # shellcheck source=../src/lib/common.sh
 source "$ROOT/src/lib/common.sh"
@@ -100,8 +101,15 @@ assert rw_ip_in_list 203.0.113.25 '203.0.113.0/24,2001:db8::1'
 assert rw_validate_email admin@example.com
 assert rw_validate_email ''
 ! rw_validate_email not-an-email || fail "invalid email accepted"
-assert rw_validate_secret '0123456789abcdef'
+valid_secret=$(python3 - <<'PY'
+import base64, json
+payload = {key: f"test-{key}" for key in ("caCertPem", "jwtPublicKey", "nodeCertPem", "nodeKeyPem")}
+print(base64.b64encode(json.dumps(payload).encode()).decode().rstrip("="))
+PY
+)
+assert rw_validate_secret "$valid_secret"
 ! rw_validate_secret short || fail "short secret accepted"
+! rw_validate_secret '0123456789abcdef' || fail "non-Remnawave secret accepted"
 printf 'OK: validators\n'
 
 dns_without_aaaa=$(
@@ -159,6 +167,13 @@ assert_file_contains "$RW_CADDYFILE" 'bind 127.0.0.1 ::1'
 assert_file_contains "$RW_CADDYFILE" 'admin off'
 assert_file_contains "$RW_CADDYFILE" 'disable_tlsalpn_challenge'
 assert_file_contains "$RW_CADDYFILE" "$RW_CADDY_STORAGE"
+RW_TEST_IPV6_AVAILABLE=false
+rw_render_caddyfile
+assert_file_contains "$RW_CADDYFILE" 'bind 0.0.0.0'
+assert_file_contains "$RW_CADDYFILE" 'bind 127.0.0.1'
+! grep -Fq '::' "$RW_CADDYFILE" || fail "IPv6 bind rendered when IPv6 is unavailable"
+RW_TEST_IPV6_AVAILABLE=true
+rw_render_caddyfile
 printf 'OK: Caddyfile rendering\n'
 
 special_secret='literal$hash#equals=quote'"'"'and-backslash\\0123456789'

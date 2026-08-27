@@ -35,7 +35,7 @@ rw_install_docker_repository() {
     key_tmp=$(mktemp /etc/apt/keyrings/.rw-docker-key.XXXXXX)
     source_tmp=$(mktemp /etc/apt/sources.list.d/.rw-docker-list.XXXXXX)
     curl -fsSL https://download.docker.com/linux/debian/gpg -o "$key_tmp"
-    gpg --show-keys "$key_tmp" >/dev/null
+    gpg --batch --with-colons --show-keys "$key_tmp" >/dev/null 2>&1
     install -m 0644 "$key_tmp" "$key_file"
     printf '%s\n' \
         "deb [arch=${arch} signed-by=${key_file}] https://download.docker.com/linux/debian ${RW_DEBIAN_CODENAME} stable" \
@@ -56,7 +56,7 @@ rw_install_caddy_repository() {
     source_tmp=$(mktemp "$(dirname "$source_file")/.rw-caddy-list.XXXXXX")
     curl -fsSL https://dl.cloudsmith.io/public/caddy/stable/gpg.key -o "$armored_tmp"
     gpg --batch --yes --dearmor -o "$key_tmp" "$armored_tmp"
-    gpg --show-keys "$key_tmp" >/dev/null
+    gpg --batch --with-colons --show-keys "$key_tmp" >/dev/null 2>&1
     install -m 0644 "$key_tmp" "$key_file"
     curl -fsSL https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt -o "$source_tmp"
     rw_atomic_install "$source_tmp" "$source_file" 0644

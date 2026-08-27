@@ -1,16 +1,17 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-CONFIG=/etc/rw-node-installer/config.env
-CERT_DIR=/etc/ssl/hysteria
-STORAGE=/var/lib/caddy/rw-node-storage
-PROJECT=/opt/remnanode
+CONFIG=${RW_CERT_SYNC_CONFIG:-/etc/rw-node-installer/config.env}
+CERT_DIR=${RW_CERT_SYNC_CERT_DIR:-/etc/ssl/hysteria}
+STORAGE=${RW_CERT_SYNC_STORAGE:-/var/lib/caddy/rw-node-storage}
+PROJECT=${RW_CERT_SYNC_PROJECT:-/opt/remnanode}
+CADDY_USER=${RW_CERT_SYNC_CADDY_USER:-caddy}
 
 [[ -r $CONFIG ]] || { echo "Missing $CONFIG" >&2; exit 1; }
 # shellcheck disable=SC1090
 source "$CONFIG"
 domain=${DOMAIN,,}
-CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
+CA_BUNDLE=${RW_CERT_SYNC_CA_BUNDLE:-/etc/ssl/certs/ca-certificates.crt}
 
 install -d -m 0700 -o root -g root "$CERT_DIR"
 probe_cert=$(mktemp "$CERT_DIR/.probe-cert.XXXXXX")
@@ -30,8 +31,8 @@ find_certificate() {
 
         # Caddy owns STORAGE. Root never opens a Caddy-controlled pathname for
         # content: bounded bytes cross the boundary through an unprivileged read.
-        runuser -u caddy -- /usr/bin/head -c 1048577 -- "$candidate" >"$probe_cert" 2>/dev/null || continue
-        runuser -u caddy -- /usr/bin/head -c 131073 -- "$key" >"$probe_key" 2>/dev/null || continue
+        runuser -u "$CADDY_USER" -- /usr/bin/head -c 1048577 -- "$candidate" >"$probe_cert" 2>/dev/null || continue
+        runuser -u "$CADDY_USER" -- /usr/bin/head -c 131073 -- "$key" >"$probe_key" 2>/dev/null || continue
         (( $(wc -c <"$probe_cert") <= 1048576 )) || continue
         (( $(wc -c <"$probe_key") <= 131072 )) || continue
 
@@ -40,8 +41,8 @@ find_certificate() {
         openssl x509 -in "$probe_cert" -out "$probe_leaf" >/dev/null 2>&1 || continue
         openssl verify -CAfile "$CA_BUNDLE" -untrusted "$probe_cert" "$probe_leaf" >/dev/null 2>&1 || continue
 
-        cert_pub=$(openssl x509 -in "$probe_cert" -pubkey -noout | openssl pkey -pubin -outform DER 2>/dev/null | sha256sum | awk '{print $1}')
-        key_pub=$(openssl pkey -in "$probe_key" -pubout -outform DER 2>/dev/null | sha256sum | awk '{print $1}')
+        cert_pub=$(openssl x509 -in "$probe_cert" -pubkey -noout | openssl pkey -pubin -outform DER 2>/dev/null | sha256sum | awk '{print $1}') || continue
+        key_pub=$(openssl pkey -in "$probe_key" -pubout -outform DER 2>/dev/null | sha256sum | awk '{print $1}') || continue
         [[ -n $cert_pub && $cert_pub == "$key_pub" ]] || continue
 
         candidate_mtime=$(stat -c %Y -- "$candidate" 2>/dev/null || printf 0)

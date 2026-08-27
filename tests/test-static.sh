@@ -52,12 +52,21 @@ if grep -RInE '^[[:space:]]*flush[[:space:]]+ruleset' src/lib src/scripts src/sy
 fi
 ok "no global nftables flush"
 
+if grep -Eq 'chain[[:space:]]+forward|hook[[:space:]]+forward' src/lib/firewall.sh; then
+    fail "host firewall must not override Docker/Plugin forwarding policy"
+fi
+ok "forwarding remains owned by Docker/Plugins"
+
 if grep -Eq 'DEFAULT_REF="main"|RW_INSTALLER_REF:-main|REPOSITORY/main/install\.sh' install.sh README.md; then
     fail "remote root bootstrap must not use a mutable default branch"
 fi
 ok "immutable remote bootstrap policy"
 
 grep -Fq 'admin off' src/lib/caddy.sh || fail "Caddy admin API is not disabled"
+grep -Fq 'runuser -u caddy' src/lib/caddy.sh || fail "Caddy validation does not use the service identity"
+if grep -Eq '^[[:space:]]*caddy validate' src/lib/caddy.sh; then
+    fail "Caddy validation runs as root"
+fi
 grep -Fq 'ssh.service.d/20-rw-node-firewall.conf' src/lib/firewall.sh || fail "SSH lacks firewall dependency"
 grep -Fq 'systemctl start rw-node-firewall.service' src/lib/firewall.sh || fail "firewall unit is not activated before dependent services"
 grep -Fq 'RuntimeDirectory=rw-node-installer' src/systemd/rw-node-firewall.service || fail "firewall unit lacks a private runtime directory"
