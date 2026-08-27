@@ -63,6 +63,10 @@ fi
 ok "immutable remote bootstrap policy"
 
 grep -Fq 'admin off' src/lib/caddy.sh || fail "Caddy admin API is not disabled"
+grep -Fq 'DPkg::Lock::Timeout=' src/lib/platform.sh || fail "APT does not wait for dpkg locks"
+if grep -RInE 'rm[[:space:]].*(/var/lib/dpkg|/var/lib/apt).*(lock|lock-frontend)' src install.sh; then
+    fail "package manager lock files must never be deleted"
+fi
 grep -Fq 'runuser -u caddy' src/lib/caddy.sh || fail "Caddy validation does not use the service identity"
 if grep -Eq '^[[:space:]]*caddy validate' src/lib/caddy.sh; then
     fail "Caddy validation runs as root"

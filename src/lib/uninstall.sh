@@ -75,8 +75,8 @@ rw_uninstall_command() {
     rw_safe_remove_tree /var/lib/caddy/rw-node-storage
 
     if [[ $purge == true ]]; then
-        apt-get purge -y caddy docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin || true
-        apt-get autoremove -y || true
+        rw_apt_get purge -y caddy docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin || true
+        rw_apt_get autoremove -y || true
     fi
 
     systemctl daemon-reload

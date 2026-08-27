@@ -1,5 +1,14 @@
 #!/usr/bin/env bash
 
+rw_apt_get() {
+    local timeout=${RW_APT_LOCK_TIMEOUT:-600}
+    [[ $timeout =~ ^[0-9]+$ ]] || rw_die "RW_APT_LOCK_TIMEOUT должен быть числом секунд."
+    # Debian may start apt-daily/unattended-upgrades at boot or immediately
+    # after package installation. APT's native fcntl-lock wait avoids both a
+    # race-prone process poll and the dangerous practice of deleting lock files.
+    apt-get -o "DPkg::Lock::Timeout=${timeout}" "$@"
+}
+
 rw_check_platform() {
     [[ -r /etc/os-release ]] || rw_die "Не найден /etc/os-release."
     # shellcheck disable=SC1091
@@ -17,8 +26,8 @@ rw_check_platform() {
 rw_apt_install_base() {
     export DEBIAN_FRONTEND=noninteractive
     rw_log "Обновляю индекс APT и устанавливаю базовые зависимости..."
-    apt-get update
-    apt-get install -y --no-install-recommends \
+    rw_apt_get update
+    rw_apt_get install -y --no-install-recommends \
         ca-certificates curl gnupg jq python3 nftables iproute2 ethtool \
         procps psmisc openssl dnsutils util-linux coreutils findutils kmod \
         systemd-timesyncd unattended-upgrades apt-transport-https openssh-server
@@ -68,8 +77,8 @@ rw_install_runtime_packages() {
     rw_log "Подключаю официальные репозитории Docker и Caddy..."
     rw_install_docker_repository
     rw_install_caddy_repository
-    apt-get update
-    apt-get install -y --no-install-recommends \
+    rw_apt_get update
+    rw_apt_get install -y --no-install-recommends \
         docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin caddy
     if ! systemctl enable --now docker.service; then
         rw_error "Docker не запустился; состояние firewall и сервисов:"

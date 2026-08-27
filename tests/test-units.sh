@@ -32,7 +32,7 @@ export RW_TEST_IPV6_AVAILABLE=true
 
 # shellcheck source=../src/lib/common.sh
 source "$ROOT/src/lib/common.sh"
-for library in validate firewall site caddy remnawave install; do
+for library in validate platform firewall site caddy remnawave install; do
     # shellcheck disable=SC1090
     source "$ROOT/src/lib/${library}.sh"
 done
@@ -82,6 +82,14 @@ assert_file_contains() {
     local file=$1 expected=$2
     grep -Fq -- "$expected" "$file" || fail "$file does not contain: $expected"
 }
+
+apt_get_arguments=""
+apt-get() { printf -v apt_get_arguments '%q ' "$@"; }
+RW_APT_LOCK_TIMEOUT=37 rw_apt_get install -y example-package
+[[ $apt_get_arguments == *'DPkg::Lock::Timeout=37'* ]] || fail "APT lock timeout was not passed"
+[[ $apt_get_arguments == *'install -y example-package'* ]] || fail "APT arguments were not preserved"
+unset -f apt-get
+printf 'OK: APT lock waiting\n'
 
 assert rw_validate_domain node.example.com
 assert rw_validate_domain xn--e1afmkfd.xn--p1ai
