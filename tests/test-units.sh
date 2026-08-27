@@ -1,0 +1,155 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
+TEMP_ROOT=$(mktemp -d "${RW_TEST_TMPDIR:-${TMPDIR:-/tmp}}/rw-node-tests.XXXXXX")
+trap 'rm -rf "$TEMP_ROOT"' EXIT
+
+# Git for Windows exposes python.exe but usually not python3.exe.
+if ! python3 -c 'raise SystemExit(0)' >/dev/null 2>&1; then
+    mkdir -p "$TEMP_ROOT/bin"
+    printf '#!/usr/bin/env bash\nexec "%s" "$@"\n' "${RW_PYTHON:-python}" >"$TEMP_ROOT/bin/python3"
+    chmod +x "$TEMP_ROOT/bin/python3"
+    PATH="$TEMP_ROOT/bin:$PATH"
+fi
+
+export RW_CONFIG_DIR="$TEMP_ROOT/etc/rw-node-installer"
+export RW_CONFIG_FILE="$RW_CONFIG_DIR/config.env"
+export RW_STATE_DIR="$TEMP_ROOT/var/lib/rw-node-installer"
+export RW_BACKUP_DIR="$RW_STATE_DIR/backups"
+export RW_PROJECT_DIR="$TEMP_ROOT/opt/remnanode"
+export RW_SITE_DIR="$TEMP_ROOT/var/www/site"
+export RW_CERT_DIR="$TEMP_ROOT/etc/ssl/hysteria"
+export RW_LOG_DIR="$TEMP_ROOT/var/log/remnanode"
+export RW_CADDYFILE="$TEMP_ROOT/etc/caddy/Caddyfile"
+export RW_CADDY_STORAGE="$TEMP_ROOT/var/lib/caddy/storage"
+export RW_CADDY_LOG_DIR="$TEMP_ROOT/var/log/caddy"
+export RW_INSTALL_DIR="$ROOT"
+export RW_LOCK_FILE="$TEMP_ROOT/run/lock"
+
+# shellcheck source=../lib/common.sh
+source "$ROOT/lib/common.sh"
+for library in validate firewall site caddy remnawave; do
+    # shellcheck disable=SC1090
+    source "$ROOT/lib/${library}.sh"
+done
+
+# Rendering functions chown root in production. Ownership is outside these unit
+# tests; root-mode integration checks run during a real Debian installation.
+chown() { :; }
+case ${OSTYPE:-} in
+    msys*|cygwin*)
+        install() {
+            local directory=false
+            while (($#)); do
+                case "$1" in
+                    -d) directory=true; shift ;;
+                    -m|-o|-g) shift 2 ;;
+                    --) shift; break ;;
+                    -*) shift ;;
+                    *) break ;;
+                esac
+            done
+            if [[ $directory == true ]]; then
+                mkdir -p -- "$@"
+            else
+                local -a values=("$@")
+                cp -- "${values[${#values[@]}-2]}" "${values[${#values[@]}-1]}"
+            fi
+        }
+        chmod() { :; }
+        ;;
+esac
+
+fail() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
+assert() { "$@" || fail "$*"; }
+assert_file_contains() {
+    local file=$1 expected=$2
+    grep -Fq -- "$expected" "$file" || fail "$file does not contain: $expected"
+}
+
+assert rw_validate_domain node.example.com
+assert rw_validate_domain xn--e1afmkfd.xn--p1ai
+! rw_validate_domain localhost || fail "single-label domain accepted"
+! rw_validate_domain '-bad.example' || fail "invalid domain accepted"
+assert test "$(rw_normalize_domain 'Node.Example.COM.')" = node.example.com
+
+assert rw_validate_single_ip 203.0.113.10
+assert rw_validate_single_ip 2001:db8::10
+! rw_validate_single_ip 203.0.113.0/24 || fail "panel CIDR accepted"
+assert test "$(rw_normalize_ip_list '203.0.113.1, 2001:db8::1,203.0.113.1')" = '203.0.113.1,2001:db8::1'
+assert rw_ip_list_has_world '0.0.0.0/0'
+assert rw_ip_list_has_world '::/0'
+! rw_ip_list_has_world '203.0.113.0/24,2001:db8::/64' || fail "ordinary prefix treated as world"
+assert rw_ip_in_list 203.0.113.25 '203.0.113.0/24,2001:db8::1'
+! rw_ip_in_list 203.0.114.25 '203.0.113.0/24' || fail "address outside CIDR accepted"
+assert rw_validate_email admin@example.com
+assert rw_validate_email ''
+! rw_validate_email not-an-email || fail "invalid email accepted"
+assert rw_validate_secret '0123456789abcdef'
+! rw_validate_secret short || fail "short secret accepted"
+printf 'OK: validators\n'
+
+export DOMAIN=node.example.com
+export PANEL_IP=203.0.113.10
+export ADMIN_IPS='198.51.100.0/24,2001:db8:1::10'
+export ACME_EMAIL=admin@example.com
+export NODE_PORT=2222
+export SITE_SEED=unit-test-seed
+export INSTALLER_REPOSITORY=https://github.com/example/repository
+export INSTALLER_REF=main
+
+mkdir -p "$RW_STATE_DIR"
+rw_write_config
+if [[ ${OSTYPE:-} != msys* && ${OSTYPE:-} != cygwin* ]]; then
+    assert test "$(stat -c '%a' "$RW_CONFIG_FILE" 2>/dev/null || stat -f '%Lp' "$RW_CONFIG_FILE")" = 600
+fi
+unset DOMAIN PANEL_IP ADMIN_IPS ACME_EMAIL NODE_PORT SITE_SEED
+rw_load_config
+assert test "$DOMAIN" = node.example.com
+assert test "$PANEL_IP" = 203.0.113.10
+printf 'OK: config round-trip\n'
+
+rw_render_firewall
+assert_file_contains "$RW_FIREWALL_FILE" 'table inet rw_node_guard {'
+assert_file_contains "$RW_FIREWALL_FILE" 'elements = { 203.0.113.10 }'
+assert_file_contains "$RW_FIREWALL_FILE" 'elements = { 203.0.113.10, 198.51.100.0/24 }'
+assert_file_contains "$RW_FIREWALL_FILE" 'elements = { 2001:db8:1::10 }'
+assert_file_contains "$RW_FIREWALL_FILE" 'tcp dport { 80, 443 }'
+assert_file_contains "$RW_FIREWALL_FILE" 'udp dport 443'
+! grep -Eq '^[[:space:]]*flush[[:space:]]+ruleset' "$RW_FIREWALL_FILE" || fail "rendered global flush"
+printf 'OK: nftables rendering\n'
+
+rw_generate_site true
+rw_verify_site_assets || fail "generated site assets failed verification"
+assert_file_contains "$RW_SITE_DIR/index.html" '@font-face'
+assert_file_contains "$RW_SITE_DIR/sitemap.xml" 'https://node.example.com/'
+printf 'OK: deterministic local site\n'
+
+rw_render_caddyfile
+assert_file_contains "$RW_CADDYFILE" 'https://node.example.com:8443'
+assert_file_contains "$RW_CADDYFILE" 'bind 127.0.0.1 ::1'
+assert_file_contains "$RW_CADDYFILE" 'admin off'
+assert_file_contains "$RW_CADDYFILE" 'disable_tlsalpn_challenge'
+assert_file_contains "$RW_CADDYFILE" "$RW_CADDY_STORAGE"
+printf 'OK: Caddyfile rendering\n'
+
+special_secret='literal$hash#equals=quote'"'"'and-backslash\\0123456789'
+rw_write_node_env "$special_secret"
+assert_file_contains "$RW_PROJECT_DIR/node.env" "SECRET_KEY=$special_secret"
+rw_render_compose
+assert_file_contains "$RW_PROJECT_DIR/docker-compose.yml" 'format: raw'
+assert_file_contains "$RW_PROJECT_DIR/docker-compose.yml" 'image: remnawave/node:latest'
+assert_file_contains "$RW_PROJECT_DIR/docker-compose.yml" 'no-new-privileges:true'
+assert_file_contains "$RW_PROJECT_DIR/docker-compose.yml" 'node.example.com:127.0.0.1'
+printf 'OK: Compose rendering and raw secret preservation\n'
+
+if [[ -n ${RW_TEST_OUTPUT:-} ]]; then
+    mkdir -p "$RW_TEST_OUTPUT"
+    cp "$RW_FIREWALL_FILE" "$RW_TEST_OUTPUT/firewall.nft"
+    cp "$RW_CADDYFILE" "$RW_TEST_OUTPUT/Caddyfile"
+    cp "$RW_PROJECT_DIR/docker-compose.yml" "$RW_TEST_OUTPUT/docker-compose.yml"
+    cp "$RW_PROJECT_DIR/node.env" "$RW_TEST_OUTPUT/node.env"
+fi
+
+printf 'Unit checks passed.\n'

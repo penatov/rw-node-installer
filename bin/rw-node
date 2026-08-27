@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+umask 027
+
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
+if [[ -r "$SCRIPT_DIR/../lib/common.sh" ]]; then
+    RW_SOURCE_ROOT=$(cd "$SCRIPT_DIR/.." && pwd -P)
+else
+    RW_SOURCE_ROOT=/usr/local/lib/rw-node-installer
+fi
+
+# shellcheck source=../lib/common.sh
+source "$RW_SOURCE_ROOT/lib/common.sh"
+RW_VERSION=$(<"$RW_SOURCE_ROOT/VERSION")
+export RW_VERSION
+for library in validate platform firewall site caddy remnawave tuning diagnose uninstall install; do
+    # shellcheck disable=SC1090
+    source "$RW_SOURCE_ROOT/lib/${library}.sh"
+done
+
+rw_usage() {
+    cat <<'EOF'
+Usage: rw-node <command> [options]
+
+Commands:
+  install             Install or reconcile the complete node
+  status              Show services, container and sockets
+  diagnose            Run comprehensive read-only checks
+  firewall            Show the managed nftables table
+  regenerate-site     Generate a new random landing page
+  cert-sync           Synchronize Caddy certificate now
+  update-node         Run safe remnawave/node:latest update now
+  profile-guidance    Print profile values; add --show-private-key for TTY-only reveal
+  uninstall           Remove managed services and data
+  version             Print version
+
+Install options:
+  --domain DOMAIN
+  --panel-ip IP
+  --admin-ips IP[,IP/CIDR...]
+  --acme-email EMAIL
+Pass SECRET_KEY through RW_SECRET_KEY for non-interactive installation.
+EOF
+}
+
+command_name=${1:-help}
+shift || true
+case "$command_name" in
+    install) rw_install_command "$RW_SOURCE_ROOT" "$@" ;;
+    status) rw_status_command "$@" ;;
+    diagnose) rw_diagnose_command "$@" ;;
+    firewall) rw_require_root; rw_load_config || true; rw_firewall_status ;;
+    regenerate-site)
+        rw_require_root; rw_acquire_lock; rw_load_config || rw_die "Установка не найдена."
+        SITE_SEED=$(openssl rand -hex 24); export SITE_SEED
+        rw_write_config; rw_generate_site true
+        rw_log "Сайт перегенерирован; Caddy отдаёт статические файлы без reload."
+        ;;
+    cert-sync) rw_require_root; exec "$RW_INSTALL_DIR/scripts/rw-node-cert-sync" "$@" ;;
+    update-node) rw_require_root; exec "$RW_INSTALL_DIR/scripts/rw-node-auto-update" "$@" ;;
+    profile-guidance)
+        rw_require_root; rw_load_config || rw_die "Установка не найдена."
+        show_private=false
+        if [[ ${1:-} == --show-private-key ]]; then show_private=true; shift; fi
+        (($# == 0)) || rw_die "Использование: rw-node profile-guidance [--show-private-key]"
+        rw_print_profile_guidance "$show_private"
+        ;;
+    uninstall) rw_uninstall_command "$@" ;;
+    version|--version|-V) printf '%s\n' "$RW_VERSION" ;;
+    help|--help|-h) rw_usage ;;
+    *) rw_usage >&2; rw_die "Неизвестная команда: $command_name" ;;
+esac

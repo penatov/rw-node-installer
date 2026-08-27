@@ -1,0 +1,12 @@
+[Unit]
+Description=Synchronize Caddy certificate for Remnawave Hysteria2
+After=caddy.service docker.service
+Wants=caddy.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/rw-node-installer/scripts/rw-node-cert-sync
+Nice=10
+UMask=0077
+NoNewPrivileges=yes
+ProtectHome=yes

@@ -1,0 +1,22 @@
+[Unit]
+Description=rw-node-installer nftables firewall
+Documentation=man:nft(8)
+DefaultDependencies=no
+After=local-fs.target
+Before=network-pre.target ssh.service docker.service caddy.service
+Wants=network-pre.target
+Conflicts=shutdown.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/rw-node-installer/scripts/rw-node-firewall-apply
+ExecReload=/usr/local/lib/rw-node-installer/scripts/rw-node-firewall-apply
+RemainAfterExit=yes
+UMask=0077
+NoNewPrivileges=yes
+CapabilityBoundingSet=CAP_NET_ADMIN
+ProtectSystem=strict
+ProtectHome=yes
+
+[Install]
+WantedBy=network-pre.target

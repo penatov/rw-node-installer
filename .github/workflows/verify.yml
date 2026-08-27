@@ -1,0 +1,45 @@
+name: verify
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install validators
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends shellcheck nftables
+
+      - name: Static and generator checks
+        run: |
+          bash tests/test-static.sh
+          python3 run.py --audit 100 --seed repository-audit
+
+      - name: Render configurations
+        env:
+          RW_TEST_OUTPUT: ${{ github.workspace }}/test-output
+        run: bash tests/test-units.sh
+
+      - name: Validate nftables syntax
+        run: sudo nft --check --file test-output/firewall.nft
+
+      - name: Validate Caddyfile syntax
+        run: |
+          docker run --rm \
+            -v "$PWD/test-output/Caddyfile:/etc/caddy/Caddyfile:ro" \
+            caddy:2.11.4@sha256:df7f1c2fb114453b951de51a98efc010db1655a92c2e86be6706714e2417a78d \
+            caddy adapt --config /etc/caddy/Caddyfile --adapter caddyfile --validate
+
+      - name: Validate Docker Compose model
+        working-directory: test-output
+        run: docker compose config --quiet

@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+TABLE_NAME="rw_node_guard"
+snapshot=${1:-}
+metadata=${2:-}
+batch=$(mktemp /run/rw-node-firewall-rollback.XXXXXX)
+trap 'rm -f "$batch"' EXIT
+
+case "$snapshot" in
+    /run/rw-node-firewall-before.*.nft) ;;
+    *) echo "Refusing unexpected snapshot path: $snapshot" >&2; exit 1 ;;
+esac
+if [[ -n $metadata && $metadata != /run/rw-node-firewall-pending ]]; then
+    echo "Refusing unexpected metadata path: $metadata" >&2
+    exit 1
+fi
+
+if nft list table inet "$TABLE_NAME" >/dev/null 2>&1; then
+    printf 'delete table inet %s\n' "$TABLE_NAME" >"$batch"
+fi
+if [[ -n $snapshot && -s $snapshot ]]; then
+    cat "$snapshot" >>"$batch"
+fi
+
+if [[ -s $batch ]]; then
+    nft --check --file "$batch"
+    nft --file "$batch"
+fi
+
+rm -f -- "$snapshot"
+[[ -n $metadata ]] && rm -f -- "$metadata"

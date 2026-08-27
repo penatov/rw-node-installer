@@ -1,0 +1,12 @@
+[Unit]
+Description=Apply conservative NIC queue tuning for rw-node
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/rw-node-installer/scripts/rw-node-nic-tune
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

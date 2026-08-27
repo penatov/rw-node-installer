@@ -1,0 +1,15 @@
+[Unit]
+Description=Update remnawave/node:latest with health rollback
+After=docker.service network-online.target rw-node-firewall.service
+Wants=network-online.target
+Requires=docker.service rw-node-firewall.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/rw-node-installer/scripts/rw-node-auto-update
+TimeoutStartSec=10min
+Nice=10
+UMask=0077
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=read-only

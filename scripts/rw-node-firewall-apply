@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+TABLE_NAME="rw_node_guard"
+RULE_FILE=${1:-/etc/rw-node-installer/firewall.nft}
+
+[[ -r $RULE_FILE ]] || { echo "Missing $RULE_FILE" >&2; exit 1; }
+command -v nft >/dev/null 2>&1 || { echo "nft is not installed" >&2; exit 1; }
+
+batch=$(mktemp /run/rw-node-firewall.XXXXXX)
+trap 'rm -f "$batch"' EXIT
+
+if nft list table inet "$TABLE_NAME" >/dev/null 2>&1; then
+    printf 'delete table inet %s\n' "$TABLE_NAME" >"$batch"
+fi
+cat "$RULE_FILE" >>"$batch"
+
+nft --check --file "$batch"
+nft --file "$batch"
+nft list table inet "$TABLE_NAME" >/dev/null

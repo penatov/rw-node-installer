@@ -1,0 +1,81 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+CONFIG=/etc/rw-node-installer/config.env
+CERT_DIR=/etc/ssl/hysteria
+STORAGE=/var/lib/caddy/rw-node-storage
+PROJECT=/opt/remnanode
+
+[[ -r $CONFIG ]] || { echo "Missing $CONFIG" >&2; exit 1; }
+# shellcheck disable=SC1090
+source "$CONFIG"
+domain=${DOMAIN,,}
+CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
+
+install -d -m 0700 -o root -g root "$CERT_DIR"
+probe_cert=$(mktemp "$CERT_DIR/.probe-cert.XXXXXX")
+probe_key=$(mktemp "$CERT_DIR/.probe-key.XXXXXX")
+probe_leaf=$(mktemp "$CERT_DIR/.probe-leaf.XXXXXX")
+selected_cert=$(mktemp "$CERT_DIR/.selected-cert.XXXXXX")
+selected_key=$(mktemp "$CERT_DIR/.selected-key.XXXXXX")
+trap 'rm -f -- "$probe_cert" "$probe_key" "$probe_leaf" "$selected_cert" "$selected_key"' EXIT
+
+find_certificate() {
+    local candidate key candidate_mtime best_mtime=0 cert_pub key_pub
+    while IFS= read -r -d '' candidate; do
+        key=${candidate%.crt}.key
+        : >"$probe_cert"
+        : >"$probe_key"
+        : >"$probe_leaf"
+
+        # Caddy owns STORAGE. Root never opens a Caddy-controlled pathname for
+        # content: bounded bytes cross the boundary through an unprivileged read.
+        runuser -u caddy -- /usr/bin/head -c 1048577 -- "$candidate" >"$probe_cert" 2>/dev/null || continue
+        runuser -u caddy -- /usr/bin/head -c 131073 -- "$key" >"$probe_key" 2>/dev/null || continue
+        (( $(wc -c <"$probe_cert") <= 1048576 )) || continue
+        (( $(wc -c <"$probe_key") <= 131072 )) || continue
+
+        openssl x509 -in "$probe_cert" -noout -checkhost "$domain" >/dev/null 2>&1 || continue
+        openssl x509 -in "$probe_cert" -noout -checkend 86400 >/dev/null 2>&1 || continue
+        openssl x509 -in "$probe_cert" -out "$probe_leaf" >/dev/null 2>&1 || continue
+        openssl verify -CAfile "$CA_BUNDLE" -untrusted "$probe_cert" "$probe_leaf" >/dev/null 2>&1 || continue
+
+        cert_pub=$(openssl x509 -in "$probe_cert" -pubkey -noout | openssl pkey -pubin -outform DER 2>/dev/null | sha256sum | awk '{print $1}')
+        key_pub=$(openssl pkey -in "$probe_key" -pubout -outform DER 2>/dev/null | sha256sum | awk '{print $1}')
+        [[ -n $cert_pub && $cert_pub == "$key_pub" ]] || continue
+
+        candidate_mtime=$(stat -c %Y -- "$candidate" 2>/dev/null || printf 0)
+        if (( candidate_mtime >= best_mtime )); then
+            install -m 0600 -o root -g root "$probe_cert" "$selected_cert"
+            install -m 0600 -o root -g root "$probe_key" "$selected_key"
+            best_mtime=$candidate_mtime
+        fi
+    done < <(find "$STORAGE/certificates" -type f -name "${domain}.crt" -print0 2>/dev/null)
+    [[ -s $selected_cert && -s $selected_key ]]
+}
+
+find_certificate || { echo "No trusted Caddy certificate and matching key for $domain are available yet" >&2; exit 1; }
+
+tmp_cert=$(mktemp "$CERT_DIR/.fullchain.XXXXXX")
+tmp_key=$(mktemp "$CERT_DIR/.privkey.XXXXXX")
+trap 'rm -f -- "$probe_cert" "$probe_key" "$probe_leaf" "$selected_cert" "$selected_key" "$tmp_cert" "$tmp_key"' EXIT
+install -m 0600 -o root -g root "$selected_cert" "$tmp_cert"
+install -m 0600 -o root -g root "$selected_key" "$tmp_key"
+
+changed=false
+if ! cmp -s "$tmp_cert" "$CERT_DIR/fullchain.pem" 2>/dev/null || \
+   ! cmp -s "$tmp_key" "$CERT_DIR/privkey.pem" 2>/dev/null; then
+    mv -f "$tmp_cert" "$CERT_DIR/fullchain.pem"
+    mv -f "$tmp_key" "$CERT_DIR/privkey.pem"
+    chmod 0600 "$CERT_DIR/fullchain.pem" "$CERT_DIR/privkey.pem"
+    chown root:root "$CERT_DIR/fullchain.pem" "$CERT_DIR/privkey.pem"
+    changed=true
+fi
+
+if [[ $changed == true ]] && command -v docker >/dev/null 2>&1 && \
+   docker inspect remnanode >/dev/null 2>&1; then
+    cd "$PROJECT"
+    docker compose restart remnanode
+fi
+
+openssl x509 -in "$CERT_DIR/fullchain.pem" -noout -subject -issuer -dates

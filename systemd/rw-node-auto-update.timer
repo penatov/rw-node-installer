@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily Remnawave Node update check with health rollback
+
+[Timer]
+OnCalendar=*-*-* 03:15:00
+RandomizedDelaySec=6h
+Persistent=true
+
+[Install]
+WantedBy=timers.target

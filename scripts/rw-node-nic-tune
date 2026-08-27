@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+cpu_count=$(nproc)
+(( cpu_count >= 4 )) || exit 0
+
+mask=$(python3 - "$cpu_count" <<'PY'
+import sys
+n = min(int(sys.argv[1]), 256)
+value = (1 << n) - 1
+groups = []
+while value:
+    groups.append(f"{value & 0xffffffff:08x}")
+    value >>= 32
+print(",".join(reversed(groups)) or "0")
+PY
+)
+
+mapfile -t interfaces < <(
+    {
+        ip -o route show default 2>/dev/null
+        ip -o -6 route show default 2>/dev/null
+    } | awk '{for (i=1; i<=NF; i++) if ($i=="dev") print $(i+1)}' | sort -u
+)
+
+for interface in "${interfaces[@]}"; do
+    [[ $interface != lo && -d /sys/class/net/$interface ]] || continue
+    ip link set dev "$interface" txqueuelen 4096 2>/dev/null || true
+    mapfile -t queues < <(find "/sys/class/net/$interface/queues" -maxdepth 1 -type d -name 'rx-*' | sort)
+    queue_count=${#queues[@]}
+    if (( queue_count > 0 && queue_count < cpu_count && queue_count <= 2 )); then
+        per_queue=$((32768 / queue_count))
+        (( per_queue < 4096 )) && per_queue=4096
+        for queue in "${queues[@]}"; do
+            [[ -w $queue/rps_cpus ]] && printf '%s' "$mask" >"$queue/rps_cpus"
+            [[ -w $queue/rps_flow_cnt ]] && printf '%s' "$per_queue" >"$queue/rps_flow_cnt"
+        done
+    fi
+done
