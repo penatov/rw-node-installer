@@ -61,12 +61,12 @@ rw-node-installer/
 ## Установка
 
 Запускайте из root-shell. Команда ниже закреплена за проверенным GitHub Actions commit
-`4f3af5d2c76fb5c3b76b608d88d12f5253e82caa`: и bootstrap, и архив загружаются из одного
+`b0c7ed9331e6255cf6d411791130b0837a551eff`: и bootstrap, и архив загружаются из одного
 неизменяемого commit. Для последующих версий заменяйте SHA только на полный 40-символьный
 идентификатор коммита с успешно пройденным workflow `verify`.
 
 ```bash
-apt-get update && apt-get install -y ca-certificates curl tar && (COMMIT_SHA=4f3af5d2c76fb5c3b76b608d88d12f5253e82caa; RW_BOOTSTRAP_FILE=$(mktemp) && trap 'rm -f -- "$RW_BOOTSTRAP_FILE"' EXIT && curl -fsSL "https://raw.githubusercontent.com/penatov/rw-node-installer/${COMMIT_SHA}/install.sh" -o "$RW_BOOTSTRAP_FILE" && env RW_INSTALLER_REPO=https://github.com/penatov/rw-node-installer RW_INSTALLER_REF="$COMMIT_SHA" bash "$RW_BOOTSTRAP_FILE")
+apt-get -o DPkg::Lock::Timeout=600 update && apt-get -o DPkg::Lock::Timeout=600 install -y ca-certificates curl tar && (COMMIT_SHA=b0c7ed9331e6255cf6d411791130b0837a551eff; RW_BOOTSTRAP_FILE=$(mktemp) && trap 'rm -f -- "$RW_BOOTSTRAP_FILE"' EXIT && curl -fsSL "https://raw.githubusercontent.com/penatov/rw-node-installer/${COMMIT_SHA}/install.sh" -o "$RW_BOOTSTRAP_FILE" && env RW_INSTALLER_REPO=https://github.com/penatov/rw-node-installer RW_INSTALLER_REF="$COMMIT_SHA" bash "$RW_BOOTSTRAP_FILE")
 ```
 
 Из локального клона, также в root-shell:
