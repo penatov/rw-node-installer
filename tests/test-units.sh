@@ -174,6 +174,9 @@ assert_file_contains "$RW_CADDYFILE" 'https://node.example.com:8443'
 assert_file_contains "$RW_CADDYFILE" 'bind 127.0.0.1 ::1'
 assert_file_contains "$RW_CADDYFILE" 'admin off'
 assert_file_contains "$RW_CADDYFILE" 'disable_tlsalpn_challenge'
+assert_file_contains "$RW_CADDYFILE" 'protocols h1 h2'
+assert_file_contains "$RW_CADDYFILE" '-Server'
+assert_file_contains "$RW_CADDYFILE" '-Alt-Svc'
 assert_file_contains "$RW_CADDYFILE" "$RW_CADDY_STORAGE"
 RW_TEST_IPV6_AVAILABLE=false
 rw_render_caddyfile

@@ -22,10 +22,14 @@ ${email_line}
     default_sni ${DOMAIN}
     auto_https disable_redirects
     storage file_system ${RW_CADDY_STORAGE}
+    servers {
+        protocols h1 h2
+    }
 }
 
 http:// {
     bind ${public_bind}
+    header -Server
     redir https://${DOMAIN}{uri} 308
 }
 
@@ -43,6 +47,8 @@ https://${DOMAIN}:8443 {
 
     header {
         -X-Powered-By
+        -Server
+        -Alt-Svc
         X-Content-Type-Options "nosniff"
         Referrer-Policy "strict-origin-when-cross-origin"
         Permissions-Policy "camera=(), microphone=(), geolocation=()"
