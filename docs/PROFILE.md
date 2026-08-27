@@ -19,6 +19,10 @@
 rw-node profile-guidance --show-private-key
 ```
 
+В актуальных версиях Xray строка `Password (PublicKey)` является прежним public key и
+вводится в клиентское поле REALITY `publicKey`. `Hash32` используется механизмом VLESS
+Encryption и для REALITY не нужен.
+
 Не копируйте общий REALITY private key на весь парк. Список чужих доменов в `serverNames` не делает маскировку лучше: локальный Caddy должен иметь сертификат для каждого фактически используемого SNI. В базовой схеме он имеет сертификат только введённого домена.
 
 ## Hysteria2

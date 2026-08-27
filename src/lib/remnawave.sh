@@ -107,7 +107,7 @@ rw_print_profile_guidance() {
     rw_ensure_profile_values
     # Allowlist public formats from old and new Xray releases. Unknown future
     # fields stay private by default instead of relying on a redaction blacklist.
-    safe_values=$(sed -nE '/^[[:space:]]*([Pp]ublic[[:space:]_-]*[Kk]ey|Password|Hash32)[[:space:]]*:/p; /^[[:space:]]*Short IDs:/,$p' \
+    safe_values=$(sed -nE '/^[[:space:]]*([Pp]ublic[[:space:]_-]*[Kk]ey|Password([[:space:]]*\([Pp]ublic[Kk]ey\))?)[[:space:]]*:/p; /^[[:space:]]*Short IDs:/,$p' \
         "$RW_PROFILE_VALUES_FILE")
     cat <<EOF
 
@@ -138,6 +138,9 @@ Fingerprint (Firefox/QQ) задаётся в Host/клиенте и устано
 
 Публичные значения Xray и предложенные shortIds:
 ${safe_values}
+
+В актуальном Xray значение "Password (PublicKey)" — это publicKey клиента REALITY.
+Hash32 относится к VLESS Encryption и для REALITY не используется.
 
 Private key сохранён только в root-файле ${RW_PROFILE_VALUES_FILE}.
 Для разового показа непосредственно в TTY: rw-node profile-guidance --show-private-key

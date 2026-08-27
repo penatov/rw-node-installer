@@ -213,6 +213,24 @@ assert_file_contains "$RW_PROJECT_DIR/docker-compose.yml" 'no-new-privileges:tru
 assert_file_contains "$RW_PROJECT_DIR/docker-compose.yml" 'node.example.com:127.0.0.1'
 printf 'OK: Compose rendering and raw secret preservation\n'
 
+cat >"$RW_PROFILE_VALUES_FILE" <<'EOF'
+REALITY X25519 output:
+PrivateKey: private-value-must-not-leak
+Password (PublicKey): public-value-for-reality
+Hash32: irrelevant-vless-encryption-value
+
+Short IDs:
+0123456789abcdef
+EOF
+chmod 0600 "$RW_PROFILE_VALUES_FILE"
+guidance=$(rw_print_profile_guidance)
+grep -Fq 'Password (PublicKey): public-value-for-reality' <<<"$guidance" || \
+    fail "current Xray public key label was not printed"
+grep -Fq '0123456789abcdef' <<<"$guidance" || fail "short ID was not printed"
+! grep -Fq 'private-value-must-not-leak' <<<"$guidance" || fail "REALITY private key leaked"
+! grep -Fq 'irrelevant-vless-encryption-value' <<<"$guidance" || fail "irrelevant Hash32 was printed"
+printf 'OK: safe current-Xray REALITY guidance\n'
+
 RW_INSTALL_DIR="$TEMP_ROOT/installed-bundle"
 RW_INSTALL_STAGING_PARENT="$TEMP_ROOT/staging"
 RW_SBIN_DIR="$TEMP_ROOT/sbin"
