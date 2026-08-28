@@ -69,6 +69,8 @@ grep -Fq -- '-Server' src/lib/caddy.sh || fail "Caddy product header is exposed"
 grep -Fq 'DPkg::Lock::Timeout=' src/lib/platform.sh || fail "APT does not wait for dpkg locks"
 grep -Fq "'{{.State.Running}} {{.HostConfig.NetworkMode}}'" src/lib/install.sh || \
     fail "reinstall preflight does not verify the managed host-network container"
+grep -Fq 'docker top remnanode -eo pid' src/lib/install.sh || \
+    fail "reinstall preflight does not verify listener ownership by container PID"
 grep -Fq 'Password([[:space:]]*\([Pp]ublic[Kk]ey\))?' src/lib/remnawave.sh || \
     fail "current Xray Password (PublicKey) label is not recognized"
 if grep -RInE 'rm[[:space:]].*(/var/lib/dpkg|/var/lib/apt).*(lock|lock-frontend)' src install.sh; then

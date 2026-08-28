@@ -90,27 +90,56 @@ rw_collect_install_inputs() {
     INSTALLER_REF=${RW_INSTALLER_REF:-${INSTALLER_REF:-local}}
 }
 
-rw_preflight_ports() {
-    local port owner managed_node=false
-    if [[ -r $RW_CONFIG_FILE ]] && rw_has docker && \
+rw_managed_caddy_pid() {
+    local caddy_pid=""
+
+    if rw_has systemctl; then
+        caddy_pid=$(systemctl show --property=MainPID --value caddy.service 2>/dev/null || true)
+        if [[ $caddy_pid =~ ^[1-9][0-9]*$ ]]; then
+            printf '%s\n' "$caddy_pid"
+        fi
+    fi
+}
+
+rw_managed_node_pids() {
+    if rw_has docker && \
        [[ $(docker inspect --format '{{.State.Running}} {{.HostConfig.NetworkMode}}' \
             remnanode 2>/dev/null || true) == 'true host' ]]; then
-        managed_node=true
+        # docker top returns host PIDs, so both the Node API process and the
+        # profile-controlled rw-core child can be matched to this container.
+        docker top remnanode -eo pid 2>/dev/null | \
+            awk '$1 ~ /^[1-9][0-9]*$/ { print $1 }' || true
+    fi
+}
+
+rw_listeners_are_managed() {
+    local owner=$1 managed_pids=$2 pid found=false
+
+    while IFS= read -r pid; do
+        [[ -n $pid ]] || continue
+        found=true
+        grep -Fxq -- "$pid" <<<"$managed_pids" || return 1
+    done < <({ grep -oE 'pid=[0-9]+' <<<"$owner" || true; } | cut -d= -f2)
+
+    [[ $found == true ]]
+}
+
+rw_preflight_ports() {
+    local port owner managed_pids="" caddy_pid="" node_pids=""
+    if [[ -r $RW_CONFIG_FILE ]]; then
+        caddy_pid=$(rw_managed_caddy_pid)
+        node_pids=$(rw_managed_node_pids)
     fi
     for port in 80 443 8443 "$NODE_PORT"; do
         owner=$(ss -H -lntup "( sport = :${port} )" 2>/dev/null || true)
         [[ -z $owner ]] && continue
-        if [[ -r $RW_CONFIG_FILE ]]; then
-            if grep -Eq 'caddy|xray|remnanode|docker-proxy' <<<"$owner"; then
-                continue
-            fi
-            # With host networking, ss reports the application process
-            # (normally "node"), not the Docker container name. Trust this
-            # occupied management port only after verifying the exact managed
-            # container is running in the expected network mode.
-            if [[ $managed_node == true && $port == "$NODE_PORT" ]]; then
-                continue
-            fi
+        case $port in
+            80|8443) managed_pids=$caddy_pid ;;
+            *) managed_pids=$node_pids ;;
+        esac
+        if [[ -r $RW_CONFIG_FILE ]] && \
+           rw_listeners_are_managed "$owner" "$managed_pids"; then
+            continue
         fi
         rw_die "Порт $port уже занят сторонним процессом: $owner"
     done

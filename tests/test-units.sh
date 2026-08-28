@@ -154,19 +154,42 @@ assert test "$PANEL_IP" = 203.0.113.10
 printf 'OK: config round-trip\n'
 
 ss() {
-    [[ $* == *':2222'* ]] && printf '%s\n' \
-        'tcp LISTEN 0 4096 0.0.0.0:2222 0.0.0.0:* users:(("node",pid=123,fd=20))'
+    case $* in
+        *':443'*) printf '%s\n' \
+            'tcp LISTEN 0 4096 *:443 *:* users:(("rw-core",pid=124,fd=7))' \
+            'udp UNCONN 0 0 *:443 *:* users:(("rw-core",pid=124,fd=8))' ;;
+        *':2222'*) printf '%s\n' \
+            'tcp LISTEN 0 4096 *:2222 *:* users:(("rw-node",pid=123,fd=20))' ;;
+    esac
     return 0
 }
 docker() {
-    [[ $* == *'inspect'* ]] && printf '%s\n' 'true host'
+    case $1 in
+        inspect) printf '%s\n' 'true host' ;;
+        top) printf '%s\n' PID 123 124 ;;
+    esac
 }
+systemctl() { return 1; }
 rw_preflight_ports
+docker() {
+    case $1 in
+        inspect) printf '%s\n' 'true host' ;;
+        top) printf '%s\n' PID 123 ;;
+    esac
+}
+if (rw_preflight_ports) >/dev/null 2>&1; then
+    fail "unmanaged rw-core process on 443 was accepted"
+fi
+ss() {
+    [[ $* == *':2222'* ]] && printf '%s\n' \
+        'tcp LISTEN 0 4096 *:2222 *:* users:(("rw-node",pid=123,fd=20))'
+    return 0
+}
 docker() { return 1; }
 if (rw_preflight_ports) >/dev/null 2>&1; then
     fail "unmanaged node process on 2222 was accepted"
 fi
-unset -f ss docker
+unset -f ss docker systemctl
 printf 'OK: idempotent managed-port preflight\n'
 
 rw_render_firewall
