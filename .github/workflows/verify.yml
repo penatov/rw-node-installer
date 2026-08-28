@@ -32,7 +32,20 @@ jobs:
         run: bash tests/test-static.sh
 
       - name: Run unit checks
-        run: bash tests/test-units.sh
+        shell: bash
+        run: |
+          set +e
+          output=$(bash tests/test-units.sh 2>&1)
+          status=$?
+          set -e
+          printf '%s\n' "$output"
+          if (( status != 0 )); then
+            message=${output//'%'/'%25'}
+            message=${message//$'\r'/'%0D'}
+            message=${message//$'\n'/'%0A'}
+            printf '::error title=Debian unit checks::%s\n' "$message"
+            exit "$status"
+          fi
 
       - name: Run Linux integration checks
         run: bash tests/test-linux-integration.sh
