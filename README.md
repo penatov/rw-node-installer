@@ -66,7 +66,7 @@ rw-node-installer/
 идентификатор коммита с успешно пройденным workflow `verify`.
 
 ```bash
-apt-get -o DPkg::Lock::Timeout=600 update && apt-get -o DPkg::Lock::Timeout=600 install -y ca-certificates curl tar && (COMMIT_SHA=129a07bc855c39ac4716a282cad87cb64e4f1f5c; RW_BOOTSTRAP_FILE=$(mktemp) && trap 'rm -f -- "$RW_BOOTSTRAP_FILE"' EXIT && curl -fsSL "https://raw.githubusercontent.com/penatov/rw-node-installer/${COMMIT_SHA}/install.sh" -o "$RW_BOOTSTRAP_FILE" && env RW_INSTALLER_REPO=https://github.com/penatov/rw-node-installer RW_INSTALLER_REF="$COMMIT_SHA" bash "$RW_BOOTSTRAP_FILE")
+apt-get -o DPkg::Lock::Timeout=600 update && apt-get -o DPkg::Lock::Timeout=600 install -y ca-certificates curl tar && (COMMIT_SHA=c188410398c32048dfdf5b82f3b6d156cc0a18d5; RW_BOOTSTRAP_FILE=$(mktemp) && trap 'rm -f -- "$RW_BOOTSTRAP_FILE"' EXIT && curl -fsSL "https://raw.githubusercontent.com/penatov/rw-node-installer/${COMMIT_SHA}/install.sh" -o "$RW_BOOTSTRAP_FILE" && env RW_INSTALLER_REPO=https://github.com/penatov/rw-node-installer RW_INSTALLER_REF="$COMMIT_SHA" bash "$RW_BOOTSTRAP_FILE")
 ```
 
 Из локального клона, также в root-shell:
