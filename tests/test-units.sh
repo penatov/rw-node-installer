@@ -120,6 +120,28 @@ assert rw_validate_secret "$valid_secret"
 ! rw_validate_secret '0123456789abcdef' || fail "non-Remnawave secret accepted"
 printf 'OK: validators\n'
 
+doh_v4=$(
+    curl() {
+        printf '%s\n' '{"Status":0,"Answer":[{"name":"node.example.com.","type":1,"TTL":300,"data":"203.0.113.10"}]}'
+    }
+    dig() { printf '%s\n' 198.51.100.20; }
+    rw_resolve_v4 node.example.com
+)
+[[ $doh_v4 == 203.0.113.10 ]] || fail "public DoH was not preferred over stale local DNS"
+doh_v6=$(
+    curl() { printf '%s\n' '{"Status":0,"Authority":[]}'; }
+    dig() { printf '%s\n' 2001:db8::20; }
+    rw_resolve_v6 node.example.com
+)
+[[ -z $doh_v6 ]] || fail "DoH NODATA was replaced with a stale local AAAA record"
+local_fallback=$(
+    curl() { return 1; }
+    dig() { printf '%s\n' 203.0.113.11; }
+    rw_resolve_v4 node.example.com
+)
+[[ $local_fallback == 203.0.113.11 ]] || fail "local DNS fallback did not work when DoH failed"
+printf 'OK: resilient public DNS resolution\n'
+
 dns_without_aaaa=$(
     (
         rw_resolve_v4() { printf '%s\n' 203.0.113.10; }

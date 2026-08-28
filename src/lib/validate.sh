@@ -119,7 +119,50 @@ if not isinstance(payload, dict) or any(not isinstance(payload.get(key), str) or
 PY
 }
 
+rw_resolve_google_doh() {
+    local domain=$1 record_type=$2 response
+    response=$(curl -fsS --max-time 8 --retry 2 --retry-delay 1 --retry-all-errors \
+        "https://dns.google/resolve?name=${domain}&type=${record_type}" 2>/dev/null) || return 1
+    python3 - "$record_type" "$response" <<'PY'
+import ipaddress
+import json
+import sys
+
+record_type = sys.argv[1].upper()
+try:
+    payload = json.loads(sys.argv[2])
+except json.JSONDecodeError:
+    raise SystemExit(1)
+
+# NOERROR and NXDOMAIN are authoritative DNS answers. Other status codes are
+# resolver failures, so the caller may fall back to the machine resolver.
+status = payload.get("Status")
+if status not in (0, 3):
+    raise SystemExit(1)
+
+expected_type = 1 if record_type == "A" else 28
+expected_version = 4 if record_type == "A" else 6
+values = set()
+for answer in payload.get("Answer") or ():
+    if answer.get("type") != expected_type:
+        continue
+    try:
+        address = ipaddress.ip_address(answer.get("data", ""))
+    except ValueError:
+        continue
+    if address.version == expected_version:
+        values.add(str(address))
+for value in sorted(values):
+    print(value)
+PY
+}
+
 rw_resolve_v4() {
+    local result
+    if result=$(rw_resolve_google_doh "$1" A); then
+        printf '%s\n' "$result" | sed '/^$/d'
+        return 0
+    fi
     dig +time=3 +tries=2 +short A "$1" 2>/dev/null | \
         awk '/^([0-9]{1,3}\.){3}[0-9]{1,3}$/ {print}' | sort -u
 }
@@ -127,6 +170,11 @@ rw_resolve_v4() {
 rw_resolve_v6() {
     # Query AAAA explicitly. getent ahostsv6 may synthesize IPv4-mapped
     # addresses on some libc/NSS configurations, incorrectly implying AAAA.
+    local result
+    if result=$(rw_resolve_google_doh "$1" AAAA); then
+        printf '%s\n' "$result" | sed '/^$/d'
+        return 0
+    fi
     dig +time=3 +tries=2 +short AAAA "$1" 2>/dev/null | \
         awk 'index($0, ":") {print tolower($0)}' | sort -u
 }
