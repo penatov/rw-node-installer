@@ -164,7 +164,15 @@ rw_resolve_v4() {
         return 0
     fi
     dig +time=3 +tries=2 +short A "$1" 2>/dev/null | \
-        awk '/^([0-9]{1,3}\.){3}[0-9]{1,3}$/ {print}' | sort -u
+        awk -F. '
+            NF == 4 && $0 ~ /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/ {
+                valid = 1
+                for (i = 1; i <= 4; i++) {
+                    if ($i < 0 || $i > 255) valid = 0
+                }
+                if (valid) print
+            }
+        ' | sort -u
 }
 
 rw_resolve_v6() {

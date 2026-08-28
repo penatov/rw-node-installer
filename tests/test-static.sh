@@ -69,6 +69,9 @@ grep -Fq -- '-Server' src/lib/caddy.sh || fail "Caddy product header is exposed"
 grep -Fq 'DPkg::Lock::Timeout=' src/lib/platform.sh || fail "APT does not wait for dpkg locks"
 grep -Fq 'https://dns.google/resolve?' src/lib/validate.sh || \
     fail "DNS validation has no public DoH source"
+if grep -Fq '{1,3}' src/lib/validate.sh; then
+    fail "DNS validation uses an interval regexp unsupported by Debian 12 mawk"
+fi
 grep -Fq "'{{.State.Running}} {{.HostConfig.NetworkMode}}'" src/lib/install.sh || \
     fail "reinstall preflight does not verify the managed host-network container"
 grep -Fq 'docker top remnanode -eo pid' src/lib/install.sh || \
