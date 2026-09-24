@@ -44,9 +44,11 @@ Commands:
 Install options:
   --domain DOMAIN
   --panel-ip IP
+  --node-port PORT     Node API TCP port (default: 2222; saved on reinstall)
   --admin-ips IP[,IP/CIDR...]
   --acme-email EMAIL
 Pass SECRET_KEY through RW_SECRET_KEY for non-interactive installation.
+Use RW_NODE_PORT or --node-port to select a port without the interactive prompt.
 EOF
 }
 

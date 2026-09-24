@@ -45,7 +45,7 @@ rw_status_command() {
     printf '\nContainers:\n'
     docker ps --filter name=remnanode --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}' 2>/dev/null || true
     printf '\nListening sockets:\n'
-    ss -H -lntup 2>/dev/null | awk -v p=":${NODE_PORT}" '$5 ~ /:(22|80|443|8443)$/ || $5 ~ p {print}' || true
+    ss -H -lntup 2>/dev/null | awk -v p=":${NODE_PORT}$" '$5 ~ /:(22|80|443|8443)$/ || $5 ~ p {print}' || true
 }
 
 rw_diagnose_command() {

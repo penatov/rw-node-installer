@@ -120,6 +120,40 @@ assert rw_validate_secret "$valid_secret"
 ! rw_validate_secret '0123456789abcdef' || fail "non-Remnawave secret accepted"
 printf 'OK: validators\n'
 
+for port in 1 2222 32456 65535; do
+    assert rw_validate_node_port "$port"
+done
+for port in '' 0 -1 65536 100000 02222 22 80 443 8443 '22+1' '1;id' 'abc' ' 2222'; do
+    ! rw_validate_node_port "$port" || fail "invalid/conflicting API port accepted: $port"
+done
+(
+    export RW_DOMAIN=node.example.com RW_SECRET_KEY="$valid_secret"
+    export RW_PANEL_IP=203.0.113.10 RW_ADMIN_IPS=198.51.100.20 RW_ACME_EMAIL=admin@example.com
+    unset RW_NODE_PORT
+    rw_load_config() { return 1; }
+    # Mock unrelated input; the port prompt's default is also valid on a TTY.
+    rw_tty_read() { printf -v "$1" '%s' "${3:-}"; }
+    rw_collect_install_inputs
+    [[ $NODE_PORT == 2222 ]] || fail 'new install lost default port'
+    rw_collect_install_inputs --node-port 32456
+    [[ $NODE_PORT == 32456 ]] || fail 'custom CLI port ignored'
+    rw_load_config() { NODE_PORT=32456; }
+    rw_collect_install_inputs
+    [[ $NODE_PORT == 32456 ]] || fail 'reinstall reset saved port'
+    RW_NODE_PORT=23456
+    rw_collect_install_inputs
+    [[ $NODE_PORT == 23456 ]] || fail 'environment did not override saved port'
+    rw_collect_install_inputs --node-port 34567
+    [[ $NODE_PORT == 34567 ]] || fail 'CLI did not override environment'
+    if (rw_collect_install_inputs --node-port 8443) >/dev/null 2>&1; then
+        fail 'conflicting port accepted during installation'
+    fi
+    if (rw_collect_install_inputs --node-port) >/dev/null 2>&1; then
+        fail 'missing port argument accepted'
+    fi
+) || fail 'API port input precedence'
+printf 'OK: API port validation and CLI/environment/saved/default precedence\n'
+
 doh_v4=$(
     curl() {
         printf '%s\n' '{"Status":0,"Answer":[{"name":"node.example.com.","type":1,"TTL":300,"data":"203.0.113.10"}]}'
@@ -314,6 +348,35 @@ assert_file_contains "$RW_PROJECT_DIR/docker-compose.yml" 'image: remnawave/node
 assert_file_contains "$RW_PROJECT_DIR/docker-compose.yml" 'no-new-privileges:true'
 assert_file_contains "$RW_PROJECT_DIR/docker-compose.yml" 'node.example.com:127.0.0.1'
 printf 'OK: Compose rendering and raw secret preservation\n'
+
+(
+    NODE_PORT=32456
+    RW_CONFIG_FILE="$TEMP_ROOT/custom-port.env"
+    RW_FIREWALL_FILE="$TEMP_ROOT/custom-port.nft"
+    RW_PROJECT_DIR="$TEMP_ROOT/custom-project"
+    rw_write_config
+    NODE_PORT=2222
+    rw_load_config
+    [[ $NODE_PORT == 32456 ]] || fail 'custom API port was not persisted'
+    rw_render_firewall
+    assert_file_contains "$RW_FIREWALL_FILE" 'ip saddr @panel_v4 tcp dport 32456 ct state new counter accept'
+    assert_file_contains "$RW_FIREWALL_FILE" 'ip6 saddr @panel_v6 tcp dport 32456 ct state new counter accept'
+    ! grep -Fq 'tcp dport 2222' "$RW_FIREWALL_FILE" || fail 'default API port remains allowed'
+    rw_write_node_env "$special_secret"
+    assert_file_contains "$RW_PROJECT_DIR/node.env" 'NODE_PORT=32456'
+    rw_render_compose
+    assert_file_contains "$RW_PROJECT_DIR/docker-compose.yml" 'path: node.env'
+    ss() {
+        [[ $* != *':32456'* ]] || printf '%s\n' \
+            'tcp LISTEN 0 4096 *:32456 *:* users:(("unmanaged",pid=9999,fd=20))'
+    }
+    rw_managed_caddy_pid() { :; }
+    rw_managed_node_pids() { :; }
+    if (rw_preflight_ports) >/dev/null 2>&1; then
+        fail 'occupied custom port accepted'
+    fi
+) || fail 'custom API port propagation'
+printf 'OK: custom API port persistence, firewall, node environment and occupied-port check\n'
 
 cat >"$RW_PROFILE_VALUES_FILE" <<'EOF'
 REALITY X25519 output:

@@ -288,11 +288,7 @@ rw_update_firewall_command() {
     rw_validate_single_ip "$PANEL_IP" || rw_die "Некорректный сохранённый IP панели."
     ADMIN_IPS=$(rw_normalize_ip_list "$ADMIN_IPS") || rw_die "Некорректный сохранённый SSH allowlist."
     rw_ip_list_has_world "$ADMIN_IPS" && rw_die "SSH allowlist не должен разрешать весь Интернет."
-    [[ ${NODE_PORT:-} =~ ^[1-9][0-9]{0,4}$ ]] && (( NODE_PORT <= 65535 )) || \
-        rw_die "Некорректный сохранённый порт API."
-    case $NODE_PORT in
-        22|80|443) rw_die "Порт API конфликтует с SSH или публичными портами." ;;
-    esac
+    rw_validate_node_port "${NODE_PORT:-}" || rw_die "Некорректный или конфликтующий сохранённый порт API."
     nft list table inet "$RW_FIREWALL_TABLE" >/dev/null || \
         rw_die "Управляемая таблица firewall отсутствует; сначала восстановите установку."
     rw_resolve_pending_firewall_transaction

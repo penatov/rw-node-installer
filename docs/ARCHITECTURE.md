@@ -10,7 +10,7 @@ Internet ── TCP 443 ──────────────> Xray VLESS R
 Internet ── UDP 443 ──────────────> Xray Hysteria2
                                            │ invalid/non-client traffic
                                            └──> https://DOMAIN:8443 ──> Caddy site
-Panel IP ── TCP 2222 ─────────────> Remnawave Node API
+Panel IP ── TCP NODE_PORT ────────> Remnawave Node API (default 2222)
 Panel + administrator IPs ─ TCP 22 > OpenSSH
 ```
 

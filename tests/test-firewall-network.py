@@ -24,7 +24,7 @@ LISTENERS = r'''
 import selectors, socket
 s = selectors.DefaultSelector()
 for family, address in ((socket.AF_INET, '0.0.0.0'), (socket.AF_INET6, '::')):
-    for port in (22, 80, 443, 2222, 8443):
+    for port in (22, 80, 443, 2222, 8443, 32456):
         sock = socket.socket(family, socket.SOCK_STREAM)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         if family == socket.AF_INET6:
@@ -96,16 +96,21 @@ def main():
         with tempfile.TemporaryDirectory(prefix="rw-firewall-test-") as temporary:
             # A foreign table must survive every managed-table replacement.
             ns(SERVER, "nft", "add", "table", "inet", "plugin_sentinel")
-            for panel, admin in (("198.18.0.10", "198.18.0.20"), ("fd42::10", "fd42::20")):
+            for panel, admin, api_port in (
+                ("198.18.0.10", "198.18.0.20", 2222),
+                ("fd42::10", "fd42::20", 2222),
+                ("198.18.0.10", "198.18.0.20", 32456),
+                ("fd42::10", "fd42::20", 32456),
+            ):
                 rules = str(Path(temporary) / "firewall.nft")
                 run("bash", "-c", '''
                     set -Eeuo pipefail
                     source src/lib/common.sh
                     source src/lib/validate.sh
                     source src/lib/firewall.sh
-                    PANEL_IP=$1 ADMIN_IPS=$2 NODE_PORT=2222
+                    PANEL_IP=$1 ADMIN_IPS=$2 NODE_PORT=$4
                     rw_render_firewall "$3"
-                ''', "test", panel, admin, rules, cwd=ROOT)
+                ''', "test", panel, admin, rules, str(api_port), cwd=ROOT)
                 for _ in range(2):
                     ns(SERVER, "env", f"RW_RUNTIME_DIR={temporary}", "bash",
                        str(ROOT / "src/scripts/rw-node-firewall-apply"), rules)
@@ -115,12 +120,14 @@ def main():
                         ns(CLIENT, sys.executable, "-c", PROBE, target, prefix + "2", str(port), "tcp", "open")
                     # 2222 and 8443 have live listeners; 45678/tcp does not.
                     # All three, and SSH, must look identically closed.
-                    for port in (22, 2222, 8443, 45678):
+                    for port in (22, 2222, 8443, 32456, 45678):
                         ns(CLIENT, sys.executable, "-c", PROBE, target, prefix + "2", str(port), "tcp", "closed")
-                    for suffix, port in ((10, 22), (10, 2222), (20, 22), (20, 2222)):
+                    for suffix, port in ((10, 22), (10, api_port), (20, 22), (20, api_port)):
                         source = prefix + str(suffix)
                         allowed = source == panel or (source == admin and port == 22)
                         ns(CLIENT, sys.executable, "-c", PROBE, target, source, str(port), "tcp", "open" if allowed else "closed")
+                    if api_port != 2222:
+                        ns(CLIENT, sys.executable, "-c", PROBE, target, prefix + "10", "2222", "tcp", "closed")
                     ns(CLIENT, sys.executable, "-c", PROBE, target, prefix + "2", "443", "udp", "open")
                     ns(CLIENT, sys.executable, "-c", PROBE, target, prefix + "2", "45678", "udp", "drop")
                 for address in ("127.0.0.1", "::1"):

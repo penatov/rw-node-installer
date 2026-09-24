@@ -42,7 +42,7 @@ rw_collect_install_inputs() {
     PANEL_IP=${RW_PANEL_IP:-}
     ADMIN_IPS=${RW_ADMIN_IPS:-}
     ACME_EMAIL=${RW_ACME_EMAIL:-}
-    NODE_PORT=2222
+    NODE_PORT=${RW_NODE_PORT:-}
 
     if rw_load_config; then
         existing_domain=${DOMAIN:-}
@@ -53,6 +53,7 @@ rw_collect_install_inputs() {
         PANEL_IP=${RW_PANEL_IP:-$existing_panel}
         ADMIN_IPS=${RW_ADMIN_IPS:-$existing_admin}
         ACME_EMAIL=${RW_ACME_EMAIL:-$existing_email}
+        NODE_PORT=${RW_NODE_PORT:-${NODE_PORT:-2222}}
     fi
 
     while (($#)); do
@@ -61,6 +62,7 @@ rw_collect_install_inputs() {
         case "$arg" in
             --domain) [[ $# -gt 0 ]] || rw_die "--domain требует значение"; DOMAIN=$1; shift ;;
             --panel-ip) [[ $# -gt 0 ]] || rw_die "--panel-ip требует значение"; PANEL_IP=$1; shift ;;
+            --node-port) [[ $# -gt 0 ]] || rw_die "--node-port требует значение"; NODE_PORT=$1; shift ;;
             --admin-ips) [[ $# -gt 0 ]] || rw_die "--admin-ips требует значение"; ADMIN_IPS=$1; shift ;;
             --acme-email) [[ $# -gt 0 ]] || rw_die "--acme-email требует значение"; ACME_EMAIL=$1; shift ;;
             *) rw_die "Неизвестный параметр install: $arg" ;;
@@ -70,6 +72,13 @@ rw_collect_install_inputs() {
     [[ -n $DOMAIN ]] || rw_tty_read DOMAIN "Домен ноды"
     DOMAIN=$(rw_normalize_domain "$DOMAIN")
     if [[ -z $SECRET_KEY ]]; then rw_tty_read_secret SECRET_KEY "SECRET_KEY Remnawave"; fi
+    if [[ -z $NODE_PORT ]]; then
+        if [[ -t 0 || -t 1 ]]; then
+            rw_tty_read NODE_PORT "TCP-порт API ноды (тот же порт укажите в панели)" 2222
+        else
+            NODE_PORT=2222
+        fi
+    fi
     [[ -n $PANEL_IP ]] || rw_tty_read PANEL_IP "IP-адрес панели"
     [[ -n $ADMIN_IPS ]] || rw_tty_read ADMIN_IPS "IP/CIDR администраторов через запятую"
     if [[ -z ${ACME_EMAIL+x} || -z $ACME_EMAIL ]]; then
@@ -78,6 +87,7 @@ rw_collect_install_inputs() {
 
     rw_validate_domain "$DOMAIN" || rw_die "Некорректный домен: $DOMAIN"
     rw_validate_secret "$SECRET_KEY" || rw_die "SECRET_KEY не является корректным payload Remnawave Node. Скопируйте ключ из панели полностью."
+    rw_validate_node_port "$NODE_PORT" || rw_die "Порт API должен быть числом 1–65535, кроме занятых проектом 22, 80, 443 и 8443."
     rw_validate_single_ip "$PANEL_IP" || rw_die "IP панели должен быть одним IPv4 или IPv6 адресом без CIDR."
     ADMIN_IPS=$(rw_normalize_ip_list "$ADMIN_IPS") || rw_die "Некорректный список административных IP."
     if rw_ip_list_has_world "$ADMIN_IPS"; then

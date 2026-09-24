@@ -38,6 +38,16 @@ rw_validate_single_ip() {
     rw_ip_version "$1" >/dev/null
 }
 
+rw_validate_node_port() {
+    local port=$1
+    # Reject leading zeroes, expressions and service names before arithmetic.
+    [[ $port =~ ^[1-9][0-9]{0,4}$ ]] || return 1
+    (( port <= 65535 )) || return 1
+    case $port in
+        22|80|443|8443) return 1 ;;
+    esac
+}
+
 rw_ip_in_list() {
     python3 - "$1" "$2" <<'PY'
 import ipaddress, sys

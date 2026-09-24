@@ -120,6 +120,8 @@ REALITY target: 127.0.0.1:8443
 Hysteria certificateFile: /etc/ssl/hysteria/fullchain.pem
 Hysteria keyFile        : /etc/ssl/hysteria/privkey.pem
 
+В записи ноды в панели укажите Node port = ${NODE_PORT} (это API, не порт клиентов).
+
 Рекомендуемый masquerade Hysteria2 (добавляется в панели вручную):
   "masquerade": {
     "type": "proxy",
