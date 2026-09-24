@@ -170,6 +170,14 @@ rw_commit_firewall() {
     systemctl disable nftables.service >/dev/null 2>&1 || true
 }
 
+rw_firewall_confirmation_pending() {
+    local unit=$1 snapshot=$2
+    [[ -r $RW_FIREWALL_PENDING && -r $snapshot ]] || return 1
+    [[ $(sed -n '1p' "$RW_FIREWALL_PENDING") == "$unit" && \
+       $(sed -n '2p' "$RW_FIREWALL_PENDING") == "$snapshot" ]] || return 1
+    systemctl is-active --quiet "${unit}.timer"
+}
+
 rw_apply_firewall_safely() {
     local candidate=$1 snapshot persistent_backup unit metadata_tmp answer
     local was_enabled=false was_active=false persistent_existed=false dependencies_existed=false
@@ -228,11 +236,16 @@ rw_apply_firewall_safely() {
         rw_die "Firewall нельзя подтвердить без TTY; правила возвращены."
     fi
     printf '%s\n' "Откройте НОВУЮ SSH-сессию и только после успешного входа введите yes." >/dev/tty
-    IFS= read -r -p "Сохранить правила? [yes/NO] " answer </dev/tty || true
+    # Leave time to commit before the independent 180-second rollback timer.
+    IFS= read -r -t 150 -p "Сохранить правила? [yes/NO, 150 секунд] " answer </dev/tty || answer=no
     if [[ ${answer,,} != yes && ${answer,,} != да ]]; then
         rw_restore_firewall_transaction "$unit" "$snapshot" "$RW_FIREWALL_PENDING"
         rm -f -- "$persistent_backup"
         rw_die "Новые правила отменены пользователем."
+    fi
+    if ! rw_firewall_confirmation_pending "$unit" "$snapshot"; then
+        rm -f -- "$persistent_backup"
+        rw_die "Срок подтверждения firewall истёк или транзакция уже завершена. Проверьте правила и повторите обновление."
     fi
     if ! rw_commit_firewall "$candidate"; then
         if [[ $persistent_existed == true ]]; then

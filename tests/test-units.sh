@@ -226,6 +226,23 @@ assert_file_contains "$RW_FIREWALL_FILE" 'meta l4proto tcp counter reject with t
 printf 'OK: nftables rendering\n'
 
 (
+    install -d -m 0700 "$RW_RUNTIME_DIR"
+    snapshot="$RW_RUNTIME_DIR/firewall-before.test.nft"
+    : >"$snapshot"
+    printf 'test-unit\n%s\n' "$snapshot" >"$RW_FIREWALL_PENDING"
+    systemctl() { return 0; }
+    assert rw_firewall_confirmation_pending test-unit "$snapshot"
+    ! rw_firewall_confirmation_pending wrong-unit "$snapshot" || fail 'accepted different transaction'
+    systemctl() { return 3; }
+    ! rw_firewall_confirmation_pending test-unit "$snapshot" || fail 'accepted expired timer'
+    systemctl() { return 0; }
+    rm -f "$RW_FIREWALL_PENDING"
+    ! rw_firewall_confirmation_pending test-unit "$snapshot" || fail 'accepted completed rollback'
+    rm -f "$snapshot"
+) || fail 'firewall confirmation lifetime'
+printf 'OK: expired firewall confirmations are rejected\n'
+
+(
     rw_require_root() { :; }
     rw_acquire_lock() { :; }
     rw_check_platform() { :; }
