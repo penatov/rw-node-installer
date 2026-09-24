@@ -75,7 +75,12 @@ rw_render_firewall() {
         tcp dport { 80, 443 } ct state new counter accept
         udp dport 443 counter accept
 
-        # Silent drop is intentional: do not reveal closed management ports.
+        # Ordinary unsolicited TCP connections see a closed port, including
+        # management ports outside their allowlists. Never reject INVALID
+        # traffic: it may belong to an existing connection (handled above).
+        meta l4proto tcp counter reject with tcp reset
+
+        # UDP and other unsolicited traffic stay silent.
         counter drop
     }
 
@@ -257,4 +262,34 @@ rw_apply_firewall_safely() {
 
 rw_firewall_status() {
     nft -a list table inet "$RW_FIREWALL_TABLE"
+}
+
+rw_update_firewall_command() {
+    local source_root=$1
+    shift
+    (($# == 0)) || rw_die "Использование: rw-node update-firewall"
+    rw_require_root
+    rw_acquire_lock
+    rw_check_platform
+    rw_load_config || rw_die "Установка не найдена; сначала выполните install."
+    rw_validate_single_ip "$PANEL_IP" || rw_die "Некорректный сохранённый IP панели."
+    ADMIN_IPS=$(rw_normalize_ip_list "$ADMIN_IPS") || rw_die "Некорректный сохранённый SSH allowlist."
+    rw_ip_list_has_world "$ADMIN_IPS" && rw_die "SSH allowlist не должен разрешать весь Интернет."
+    [[ ${NODE_PORT:-} =~ ^[1-9][0-9]{0,4}$ ]] && (( NODE_PORT <= 65535 )) || \
+        rw_die "Некорректный сохранённый порт API."
+    case $NODE_PORT in
+        22|80|443) rw_die "Порт API конфликтует с SSH или публичными портами." ;;
+    esac
+    nft list table inet "$RW_FIREWALL_TABLE" >/dev/null || \
+        rw_die "Управляемая таблица firewall отсутствует; сначала восстановите установку."
+    rw_resolve_pending_firewall_transaction
+    # Do not overwrite a runtime bundle while it is being used as the source.
+    if [[ $(cd "$source_root" && pwd -P) != $(cd "$RW_INSTALL_DIR" && pwd -P) ]]; then
+        rw_install_bundle "$source_root"
+    fi
+    rw_render_firewall "$RW_FIREWALL_CANDIDATE"
+    rw_install_firewall_service
+    rw_apply_firewall_safely "$RW_FIREWALL_CANDIDATE"
+    rw_log "Firewall обновлён: запрещённые TCP-подключения получают RST; UDP остаётся DROP."
+    rw_info "Ключи, Config Profile, сайт и контейнер не изменены. Правила сохраняются после reboot."
 }

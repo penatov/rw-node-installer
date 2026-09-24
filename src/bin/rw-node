@@ -33,6 +33,7 @@ Commands:
   status              Show services, container and sockets
   diagnose            Run comprehensive read-only checks
   firewall            Show the managed nftables table
+  update-firewall     Reconcile only firewall with saved allowlists and SSH rollback
   regenerate-site     Generate a new random landing page
   cert-sync           Synchronize Caddy certificate now
   update-node         Run safe remnawave/node:latest update now
@@ -56,6 +57,7 @@ case "$command_name" in
     status) rw_status_command "$@" ;;
     diagnose) rw_diagnose_command "$@" ;;
     firewall) rw_require_root; rw_load_config || true; rw_firewall_status ;;
+    update-firewall) rw_update_firewall_command "$RW_SOURCE_ROOT" "$@" ;;
     regenerate-site)
         rw_require_root; rw_acquire_lock; rw_load_config || rw_die "Установка не найдена."
         SITE_SEED=$(openssl rand -hex 24); export SITE_SEED

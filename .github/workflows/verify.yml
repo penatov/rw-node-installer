@@ -74,6 +74,9 @@ jobs:
       - name: Validate nftables syntax
         run: sudo nft --check --file test-output/firewall.nft
 
+      - name: Verify TCP RST, allowlists and UDP in isolated IPv4/IPv6 networks
+        run: sudo python3 tests/test-firewall-network.py
+
       - name: Exercise nftables idempotency in an isolated network namespace
         run: |
           sudo ip netns add rw-node-ci

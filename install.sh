@@ -5,12 +5,19 @@ umask 027
 die() { printf '[x] %s\n' "$*" >&2; exit 1; }
 [[ ${EUID:-$(id -u)} -eq 0 ]] || die "Run from a root shell (for example: su -c 'bash install.sh')."
 
+action=install
+if [[ ${1:-} == --firewall-only ]]; then
+    action=update-firewall
+    shift
+    (($# == 0)) || die "--firewall-only uses saved settings and accepts no extra arguments."
+fi
+
 script_dir=""
 if [[ ${BASH_SOURCE[0]} != /dev/fd/* && ${BASH_SOURCE[0]} != /proc/self/fd/* ]]; then
     script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd -P || true)
 fi
 if [[ -n $script_dir && -x $script_dir/src/bin/rw-node && -r $script_dir/src/lib/common.sh ]]; then
-    exec "$script_dir/src/bin/rw-node" install "$@"
+    exec "$script_dir/src/bin/rw-node" "$action" "$@"
 fi
 
 repo=${RW_INSTALLER_REPO:-}
@@ -39,4 +46,4 @@ tar -xzf "$archive" --strip-components=1 -C "$tmp_dir/source"
 
 export RW_INSTALLER_REPO="$repo"
 export RW_INSTALLER_REF="$ref"
-"$tmp_dir/source/src/bin/rw-node" install "$@"
+"$tmp_dir/source/src/bin/rw-node" "$action" "$@"

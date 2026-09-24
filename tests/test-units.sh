@@ -221,8 +221,48 @@ assert_file_contains "$RW_FIREWALL_FILE" 'elements = { 203.0.113.10, 198.51.100.
 assert_file_contains "$RW_FIREWALL_FILE" 'elements = { 2001:db8:1::10 }'
 assert_file_contains "$RW_FIREWALL_FILE" 'tcp dport { 80, 443 }'
 assert_file_contains "$RW_FIREWALL_FILE" 'udp dport 443'
+assert_file_contains "$RW_FIREWALL_FILE" 'meta l4proto tcp counter reject with tcp reset'
 ! grep -Eq '^[[:space:]]*flush[[:space:]]+ruleset' "$RW_FIREWALL_FILE" || fail "rendered global flush"
 printf 'OK: nftables rendering\n'
+
+(
+    rw_require_root() { :; }
+    rw_acquire_lock() { :; }
+    rw_check_platform() { :; }
+    nft() { :; }
+    rw_resolve_pending_firewall_transaction() { :; }
+    rw_install_firewall_service() { :; }
+    applied=false
+    rw_apply_firewall_safely() {
+        assert_file_contains "$1" 'elements = { 203.0.113.10 }'
+        assert_file_contains "$1" 'elements = { 203.0.113.10, 198.51.100.0/24 }'
+        assert_file_contains "$1" 'meta l4proto tcp counter reject with tcp reset'
+        applied=true
+    }
+    rw_install_bundle() { fail 'same-source runtime replacement'; }
+    docker() { fail 'firewall-only update touched Docker'; }
+    rw_write_config() { fail 'firewall-only update changed saved settings'; }
+    rw_write_node_env() { fail 'firewall-only update changed credentials'; }
+    rw_apt_install_base() { fail 'firewall-only update ran APT'; }
+    rw_update_firewall_command "$RW_INSTALL_DIR"
+    [[ $applied == true ]] || fail 'firewall-only update did not apply rules'
+
+    for invalid_case in world port panel; do
+        if (
+            rw_load_config() {
+                case $invalid_case in
+                    world) ADMIN_IPS=0.0.0.0/0 ;;
+                    port) NODE_PORT=443 ;;
+                    panel) PANEL_IP=not-an-ip ;;
+                esac
+            }
+            rw_update_firewall_command "$RW_INSTALL_DIR"
+        ) >/dev/null 2>&1; then
+            fail "firewall update accepted invalid saved settings: $invalid_case"
+        fi
+    done
+) || fail 'firewall-only update'
+printf 'OK: firewall-only update preserves settings and runtime services\n'
 
 rw_generate_site true
 rw_verify_site_assets || fail "generated site assets failed verification"
