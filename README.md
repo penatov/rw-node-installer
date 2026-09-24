@@ -66,7 +66,7 @@ rw-node-installer/
 идентификатор коммита с успешно пройденным workflow `verify`.
 
 ```bash
-apt-get -o DPkg::Lock::Timeout=600 update && apt-get -o DPkg::Lock::Timeout=600 install -y ca-certificates curl tar && (COMMIT_SHA=e200d278d2fed85eb4bb9fa14594b285b14ae1f6; RW_BOOTSTRAP_FILE=$(mktemp) && trap 'rm -f -- "$RW_BOOTSTRAP_FILE"' EXIT && curl -fsSL "https://raw.githubusercontent.com/penatov/rw-node-installer/${COMMIT_SHA}/install.sh" -o "$RW_BOOTSTRAP_FILE" && env RW_INSTALLER_REPO=https://github.com/penatov/rw-node-installer RW_INSTALLER_REF="$COMMIT_SHA" bash "$RW_BOOTSTRAP_FILE")
+apt-get -o DPkg::Lock::Timeout=600 update && apt-get -o DPkg::Lock::Timeout=600 install -y ca-certificates curl tar && (COMMIT_SHA=064a475285674679e7bbaacf0822a93483e0c524; RW_BOOTSTRAP_FILE=$(mktemp) && trap 'rm -f -- "$RW_BOOTSTRAP_FILE"' EXIT && curl -fsSL "https://raw.githubusercontent.com/penatov/rw-node-installer/${COMMIT_SHA}/install.sh" -o "$RW_BOOTSTRAP_FILE" && env RW_INSTALLER_REPO=https://github.com/penatov/rw-node-installer RW_INSTALLER_REF="$COMMIT_SHA" bash "$RW_BOOTSTRAP_FILE")
 ```
 
 Для обновления только firewall на уже установленной ноде, из root-shell:
@@ -74,7 +74,7 @@ apt-get -o DPkg::Lock::Timeout=600 update && apt-get -o DPkg::Lock::Timeout=600 
 ```bash
 (
   set -e
-  COMMIT_SHA=e200d278d2fed85eb4bb9fa14594b285b14ae1f6
+  COMMIT_SHA=064a475285674679e7bbaacf0822a93483e0c524
   RW_BOOTSTRAP_FILE=$(mktemp)
   trap 'rm -f -- "$RW_BOOTSTRAP_FILE"' EXIT
   curl -fsSL "https://raw.githubusercontent.com/penatov/rw-node-installer/${COMMIT_SHA}/install.sh" -o "$RW_BOOTSTRAP_FILE"
