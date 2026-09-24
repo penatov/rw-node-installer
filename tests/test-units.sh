@@ -140,7 +140,7 @@ done
     rw_load_config() { NODE_PORT=32456; }
     rw_collect_install_inputs
     [[ $NODE_PORT == 32456 ]] || fail 'reinstall reset saved port'
-    RW_NODE_PORT=23456
+    export RW_NODE_PORT=23456
     rw_collect_install_inputs
     [[ $NODE_PORT == 23456 ]] || fail 'environment did not override saved port'
     rw_collect_install_inputs --node-port 34567
