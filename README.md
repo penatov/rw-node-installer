@@ -66,8 +66,25 @@ rw-node-installer/
 идентификатор коммита с успешно пройденным workflow `verify`.
 
 ```bash
-apt-get -o DPkg::Lock::Timeout=600 update && apt-get -o DPkg::Lock::Timeout=600 install -y ca-certificates curl tar && (COMMIT_SHA=6e6c92c6c6a23720be24ce2e10ad4f30d7141859; RW_BOOTSTRAP_FILE=$(mktemp) && trap 'rm -f -- "$RW_BOOTSTRAP_FILE"' EXIT && curl -fsSL "https://raw.githubusercontent.com/penatov/rw-node-installer/${COMMIT_SHA}/install.sh" -o "$RW_BOOTSTRAP_FILE" && env RW_INSTALLER_REPO=https://github.com/penatov/rw-node-installer RW_INSTALLER_REF="$COMMIT_SHA" bash "$RW_BOOTSTRAP_FILE")
+apt-get -o DPkg::Lock::Timeout=600 update && apt-get -o DPkg::Lock::Timeout=600 install -y ca-certificates curl tar && (COMMIT_SHA=e200d278d2fed85eb4bb9fa14594b285b14ae1f6; RW_BOOTSTRAP_FILE=$(mktemp) && trap 'rm -f -- "$RW_BOOTSTRAP_FILE"' EXIT && curl -fsSL "https://raw.githubusercontent.com/penatov/rw-node-installer/${COMMIT_SHA}/install.sh" -o "$RW_BOOTSTRAP_FILE" && env RW_INSTALLER_REPO=https://github.com/penatov/rw-node-installer RW_INSTALLER_REF="$COMMIT_SHA" bash "$RW_BOOTSTRAP_FILE")
 ```
+
+Для обновления только firewall на уже установленной ноде, из root-shell:
+
+```bash
+(
+  set -e
+  COMMIT_SHA=e200d278d2fed85eb4bb9fa14594b285b14ae1f6
+  RW_BOOTSTRAP_FILE=$(mktemp)
+  trap 'rm -f -- "$RW_BOOTSTRAP_FILE"' EXIT
+  curl -fsSL "https://raw.githubusercontent.com/penatov/rw-node-installer/${COMMIT_SHA}/install.sh" -o "$RW_BOOTSTRAP_FILE"
+  env RW_INSTALLER_REPO=https://github.com/penatov/rw-node-installer RW_INSTALLER_REF="$COMMIT_SHA" bash "$RW_BOOTSTRAP_FILE" --firewall-only
+)
+```
+
+Whitelist берётся из сохранённых настроек. Ключи, контейнер и профиль панели
+не меняются. Откройте новую SSH-сессию и подтвердите `yes` за 150 секунд;
+без подтверждения firewall откатится. [Подробности и проверка](docs/OPERATIONS.md#обновление-правил-без-переустановки).
 
 Из локального клона, также в root-shell:
 
