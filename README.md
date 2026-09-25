@@ -66,7 +66,7 @@ rw-node-installer/
 идентификатор коммита с успешно пройденным workflow `verify`.
 
 ```bash
-apt-get -o DPkg::Lock::Timeout=600 update && apt-get -o DPkg::Lock::Timeout=600 install -y ca-certificates curl tar && (COMMIT_SHA=70c67fdd31460754160d54389219b2c283cadbba; RW_BOOTSTRAP_FILE=$(mktemp) && trap 'rm -f -- "$RW_BOOTSTRAP_FILE"' EXIT && curl -fsSL "https://raw.githubusercontent.com/penatov/rw-node-installer/${COMMIT_SHA}/install.sh" -o "$RW_BOOTSTRAP_FILE" && env RW_INSTALLER_REPO=https://github.com/penatov/rw-node-installer RW_INSTALLER_REF="$COMMIT_SHA" bash "$RW_BOOTSTRAP_FILE")
+apt-get -o DPkg::Lock::Timeout=600 update && apt-get -o DPkg::Lock::Timeout=600 install -y ca-certificates curl tar && (COMMIT_SHA=dd0f311393f92300cec1f21a967e125b531e4cda; RW_BOOTSTRAP_FILE=$(mktemp) && trap 'rm -f -- "$RW_BOOTSTRAP_FILE"' EXIT && curl -fsSL "https://raw.githubusercontent.com/penatov/rw-node-installer/${COMMIT_SHA}/install.sh" -o "$RW_BOOTSTRAP_FILE" && env RW_INSTALLER_REPO=https://github.com/penatov/rw-node-installer RW_INSTALLER_REF="$COMMIT_SHA" bash "$RW_BOOTSTRAP_FILE")
 ```
 
 Для обновления только firewall на уже установленной ноде, из root-shell:
@@ -74,7 +74,7 @@ apt-get -o DPkg::Lock::Timeout=600 update && apt-get -o DPkg::Lock::Timeout=600 
 ```bash
 (
   set -e
-  COMMIT_SHA=70c67fdd31460754160d54389219b2c283cadbba
+  COMMIT_SHA=dd0f311393f92300cec1f21a967e125b531e4cda
   RW_BOOTSTRAP_FILE=$(mktemp)
   trap 'rm -f -- "$RW_BOOTSTRAP_FILE"' EXIT
   curl -fsSL "https://raw.githubusercontent.com/penatov/rw-node-installer/${COMMIT_SHA}/install.sh" -o "$RW_BOOTSTRAP_FILE"
@@ -160,6 +160,8 @@ GitHub Actions дополнительно запускает ShellCheck, син�
 ### Генератор без Python
 
 На ноде генерация выполняется через Bash, штатный `awk` (`mawk` на Debian) и coreutils.
+В текущем дереве репозитория нет Python-исходников; конвертер и старый эталон также
+удалены, проверки заменены Bash/awk-тестами с фиксированными контрольными данными.
 Проверки IP/CIDR, ключа панели, DNS и настройка сетевых очередей также не требуют Python.
 Явная зависимость нашего кода от `python3` удалена; уже установленные пакеты не удаляются.
 Однако системный `unattended-upgrades` по-прежнему устанавливает Python как свою зависимость:
