@@ -1,18 +1,22 @@
 #!/usr/bin/env bash
 
 rw_install_bundle() {
-    local source_root=$1 runtime_source generator staging old
+    local source_root=$1 runtime_source generator staging old component
     local staging_parent=${RW_INSTALL_STAGING_PARENT:-/usr/local/lib}
     local sbin_dir=${RW_SBIN_DIR:-/usr/local/sbin}
     if [[ -d $source_root/src/lib ]]; then
         runtime_source=$source_root/src
-        generator=$source_root/tools/site_generator.py
+        generator=$source_root/tools/site_generator.sh
     else
         runtime_source=$source_root
-        generator=$source_root/site_generator.py
+        generator=$source_root/site_generator.sh
     fi
     [[ -r $runtime_source/lib/common.sh && -r $generator ]] || \
         rw_die "Неполный source bundle: $source_root"
+    for component in runtime design check main; do
+        [[ -r $(dirname "$generator")/site-generator/$component.awk ]] || \
+            rw_die "Неполный генератор сайта: $component.awk"
+    done
     staging=$(mktemp -d "$staging_parent/.rw-node-installer.XXXXXX")
     install -d -m 0755 "$staging"/{bin,lib,scripts,systemd,assets/site,assets/fonts,docs}
     cp -a "$runtime_source/bin/." "$staging/bin/"
@@ -22,7 +26,8 @@ rw_install_bundle() {
     cp -a "$source_root/assets/site/." "$staging/assets/site/"
     cp -a "$source_root/assets/fonts/." "$staging/assets/fonts/"
     cp -a "$source_root/docs/." "$staging/docs/" 2>/dev/null || true
-    install -m 0644 "$generator" "$staging/site_generator.py"
+    install -m 0755 "$generator" "$staging/site_generator.sh"
+    cp -a "$(dirname "$generator")/site-generator" "$staging/site-generator"
     install -m 0644 "$source_root/VERSION" "$staging/VERSION"
     chmod 0755 "$staging/bin/rw-node" "$staging"/scripts/*
 

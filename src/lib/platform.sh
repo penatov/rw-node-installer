@@ -28,7 +28,7 @@ rw_apt_install_base() {
     rw_log "Обновляю индекс APT и устанавливаю базовые зависимости..."
     rw_apt_get update
     rw_apt_get install -y --no-install-recommends \
-        ca-certificates curl gnupg jq python3 nftables iproute2 ethtool \
+        ca-certificates curl gnupg jq mawk nftables iproute2 ethtool \
         procps psmisc openssl dnsutils util-linux coreutils findutils kmod \
         systemd-timesyncd unattended-upgrades apt-transport-https openssh-server
 }

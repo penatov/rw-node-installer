@@ -22,15 +22,13 @@ rw_validate_domain() {
 }
 
 rw_ip_version() {
-    python3 - "$1" <<'PY'
-import ipaddress, sys
-try:
-    value = sys.argv[1]
-    obj = ipaddress.ip_network(value, strict=False) if "/" in value else ipaddress.ip_address(value)
-    print(obj.version)
-except ValueError:
-    raise SystemExit(1)
-PY
+    rw_ip_tool version "$1"
+}
+
+rw_ip_tool() {
+    local helper
+    helper="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../scripts" && pwd -P)/rw-ip.awk"
+    LC_ALL=C RW_IP_MODE=$1 RW_IP_INPUT=$2 RW_IP_LIST=${3:-} awk -f "$helper"
 }
 
 rw_validate_single_ip() {
@@ -49,122 +47,49 @@ rw_validate_node_port() {
 }
 
 rw_ip_in_list() {
-    python3 - "$1" "$2" <<'PY'
-import ipaddress, sys
-try:
-    address = ipaddress.ip_address(sys.argv[1])
-    networks = []
-    for value in sys.argv[2].split(','):
-        value = value.strip()
-        if value:
-            networks.append(ipaddress.ip_network(value, strict=False))
-except ValueError:
-    raise SystemExit(1)
-raise SystemExit(0 if any(address.version == network.version and address in network for network in networks) else 1)
-PY
+    rw_ip_tool in-list "$1" "$2"
 }
 
 rw_normalize_ip_list() {
-    python3 - "$1" <<'PY'
-import ipaddress, sys
-raw = sys.argv[1]
-seen = set()
-result = []
-for chunk in raw.split(','):
-    value = chunk.strip()
-    if not value:
-        continue
-    try:
-        obj = ipaddress.ip_network(value, strict=False) if '/' in value else ipaddress.ip_address(value)
-    except ValueError as exc:
-        print(f"Некорректный IP/CIDR: {value}: {exc}", file=sys.stderr)
-        raise SystemExit(1)
-    normalized = str(obj)
-    if normalized not in seen:
-        seen.add(normalized)
-        result.append(normalized)
-if not result:
-    print("Список IP пуст.", file=sys.stderr)
-    raise SystemExit(1)
-print(','.join(result))
-PY
+    rw_ip_tool normalize "$1"
 }
 
 rw_ip_list_has_world() {
-    python3 - "$1" <<'PY'
-import ipaddress, sys
-for value in sys.argv[1].split(','):
-    value = value.strip()
-    if not value:
-        continue
-    network = ipaddress.ip_network(value, strict=False) if '/' in value else None
-    if network is not None and network.prefixlen == 0:
-        raise SystemExit(0)
-raise SystemExit(1)
-PY
+    rw_ip_tool world "$1"
 }
 
 rw_validate_email() {
     [[ -z $1 || $1 =~ ^[A-Za-z0-9.!#$%\&\'*+/=?^_{|}~-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,63}$ ]]
 }
 
-rw_validate_secret() {
-    python3 - "$1" <<'PY'
-import base64
-import binascii
-import json
-import sys
-
-value = sys.argv[1]
-if len(value) < 16 or "\n" in value or "\r" in value:
-    raise SystemExit(1)
-try:
-    padded = value + "=" * (-len(value) % 4)
-    payload = json.loads(base64.b64decode(padded, altchars=b"-_", validate=True).decode("utf-8"))
-except (ValueError, binascii.Error, UnicodeDecodeError, json.JSONDecodeError):
-    raise SystemExit(1)
-required = ("caCertPem", "jwtPublicKey", "nodeCertPem", "nodeKeyPem")
-if not isinstance(payload, dict) or any(not isinstance(payload.get(key), str) or not payload[key].strip() for key in required):
-    raise SystemExit(1)
-PY
-}
+rw_validate_secret() (
+    # Keep decoded bytes in a pipe: Bash variables silently discard NUL bytes.
+    # iconv is supplied by Debian's essential libc-bin package.
+    set -o pipefail
+    local value=$1
+    [[ ${#value} -ge 16 && $value =~ ^[A-Za-z0-9_+/-]+={0,2}$ ]] || return 1
+    while ((${#value} % 4)); do value+='='; done
+    printf '%s' "$value" | tr '_-' '/+' | base64 --decode 2>/dev/null |
+        iconv -f UTF-8 -t UTF-8 2>/dev/null | jq -e -R -s '
+        fromjson | type == "object" and
+        all(.caCertPem, .jwtPublicKey, .nodeCertPem, .nodeKeyPem;
+            type == "string" and test("\\S"))' >/dev/null 2>&1
+)
 
 rw_resolve_google_doh() {
-    local domain=$1 record_type=$2 response
+    local domain=$1 record_type=$2 response expected version answer normalized answers
     response=$(curl -fsS --max-time 8 --retry 2 --retry-delay 1 --retry-all-errors \
         "https://dns.google/resolve?name=${domain}&type=${record_type}" 2>/dev/null) || return 1
-    python3 - "$record_type" "$response" <<'PY'
-import ipaddress
-import json
-import sys
-
-record_type = sys.argv[1].upper()
-try:
-    payload = json.loads(sys.argv[2])
-except json.JSONDecodeError:
-    raise SystemExit(1)
-
-# NOERROR and NXDOMAIN are authoritative DNS answers. Other status codes are
-# resolver failures, so the caller may fall back to the machine resolver.
-status = payload.get("Status")
-if status not in (0, 3):
-    raise SystemExit(1)
-
-expected_type = 1 if record_type == "A" else 28
-expected_version = 4 if record_type == "A" else 6
-values = set()
-for answer in payload.get("Answer") or ():
-    if answer.get("type") != expected_type:
-        continue
-    try:
-        address = ipaddress.ip_address(answer.get("data", ""))
-    except ValueError:
-        continue
-    if address.version == expected_version:
-        values.add(str(address))
-for value in sorted(values):
-    print(value)
-PY
+    printf '%s' "$response" | jq -e '.Status == 0 or .Status == 3' >/dev/null 2>&1 || return 1
+    if [[ $record_type == A ]]; then expected=1 version=4; else expected=28 version=6; fi
+    answers=$(printf '%s' "$response" | jq -r --argjson type "$expected" \
+        '(.Answer // [])[] | select(.type == $type) | .data | select(type == "string")') || return 1
+    while IFS= read -r answer; do
+        [[ -n $answer && $answer != */* ]] || continue
+        [[ $(rw_ip_version "$answer" 2>/dev/null) == "$version" ]] || continue
+        normalized=$(rw_normalize_ip_list "$answer") || continue
+        printf '%s\n' "$normalized"
+    done <<<"$answers" | sort -u
 }
 
 rw_resolve_v4() {

@@ -18,7 +18,7 @@
 - официальный Docker Engine и Compose plugin;
 - официальный стабильный Caddy;
 - `remnawave/node:latest` в host network с `NET_ADMIN` для Node Plugins;
-- уникальный сайт из `tools/site_generator.py`, локальные WOFF2-шрифты без Google Fonts;
+- уникальный сайт из `tools/site_generator.sh` (Bash + штатный awk), локальные WOFF2-шрифты без Google Fonts; Python на ноде не требуется;
 - сертификат ACME HTTP-01 на Caddy и его безопасная копия в `/etc/ssl/hysteria`;
 - отдельная таблица `inet rw_node_guard`, не удаляющая таблицы Remnawave Plugins;
 - SSH `22/tcp` только от IP панели и списка администраторов;
@@ -34,7 +34,7 @@
 ```text
 rw-node-installer/
 ├── src/                 runtime: CLI, shell-модули, systemd units и служебные scripts
-├── tools/               генератор уникального одностраничного сайта
+├── tools/               Bash/awk-генератор и инструмент проверки переноса
 ├── assets/              локальные шрифты и статические файлы сайта
 ├── docs/                архитектура, эксплуатация и рекомендации профиля
 ├── tests/               статические и unit-проверки
@@ -147,10 +147,26 @@ nftables надёжно скрывает административные пор
 ```bash
 bash tests/test-static.sh
 bash tests/test-units.sh
-python3 tools/site_generator.py --audit 100 --seed repository-audit
+bash tests/test-no-python.sh
+bash tools/site_generator.sh --audit 100 --seed repository-audit
 ```
 
 GitHub Actions дополнительно запускает ShellCheck, синтаксическую проверку nftables, адаптацию Caddyfile и `docker compose config`.
+
+### Генератор без Python
+
+На ноде генерация выполняется через Bash, штатный `awk` (`mawk` на Debian) и coreutils.
+Проверки IP/CIDR, ключа панели, DNS и настройка сетевых очередей также не требуют Python.
+Установщик больше не устанавливает `python3`; уже установленные пакеты не удаляет.
+
+Сохранены все семейства шаблонов, CSS, правила выбора и сочетания секций. Служебные
+надписи `DNA / SYSTEM / MODE / GRID` заменены обычным содержимым подвала. Один seed
+в новой версии воспроизводим, разные seed дают разные комбинации; старый seed
+может дать другой сайт из-за смены генератора случайных чисел. Существующий сайт
+не перезаписывается при обычной повторной установке. Для его замены после обновления
+runtime используется `rw-node regenerate-site`.
+
+Описание устройства и проверок переноса: [docs/SITE_GENERATOR.md](docs/SITE_GENERATOR.md).
 
 ## Лицензия
 

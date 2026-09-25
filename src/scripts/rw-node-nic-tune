@@ -4,17 +4,16 @@ set -Eeuo pipefail
 cpu_count=$(nproc)
 (( cpu_count >= 4 )) || exit 0
 
-mask=$(python3 - "$cpu_count" <<'PY'
-import sys
-n = min(int(sys.argv[1]), 256)
-value = (1 << n) - 1
-groups = []
-while value:
-    groups.append(f"{value & 0xffffffff:08x}")
-    value >>= 32
-print(",".join(reversed(groups)) or "0")
-PY
-)
+mask=''
+mask_cpus=$cpu_count
+((mask_cpus <= 256)) || mask_cpus=256
+while ((mask_cpus > 0)); do
+    bits=$mask_cpus
+    ((bits <= 32)) || bits=32
+    printf -v mask_group '%08x' "$(((1 << bits) - 1))"
+    mask="${mask_group}${mask:+,$mask}"
+    mask_cpus=$((mask_cpus - bits))
+done
 
 mapfile -t interfaces < <(
     {

@@ -7,11 +7,6 @@ cd "$ROOT"
 fail() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
 ok() { printf 'OK: %s\n' "$*"; }
 
-PYTHON_BIN=python3
-if ! "$PYTHON_BIN" -c 'raise SystemExit(0)' >/dev/null 2>&1; then
-    PYTHON_BIN=${RW_PYTHON:-python}
-fi
-
 mapfile -t shell_files < <(find . -type f \( -name '*.sh' -o -path './src/bin/rw-node' -o -path './src/scripts/rw-node-*' \) -not -path './.git/*' | sort)
 ((${#shell_files[@]} > 10)) || fail "shell file inventory is unexpectedly small"
 for file in "${shell_files[@]}"; do
@@ -26,17 +21,19 @@ else
     printf 'SKIP: shellcheck is not installed\n'
 fi
 
-"$PYTHON_BIN" -m py_compile tools/site_generator.py
-ok "Python syntax"
+if grep -RInE 'python[0-9]*([[:space:]]|$)' src tools/site_generator.sh tools/site-generator; then
+    fail "Python runtime dependency reintroduced"
+fi
+ok "no Python dependency in node runtime"
 
 [[ -x src/bin/rw-node ]] || fail "missing runtime entry point"
 [[ -r src/lib/common.sh ]] || fail "missing runtime libraries"
 [[ -x src/scripts/rw-node-healthcheck ]] || fail "missing runtime helpers"
 [[ -r src/systemd/rw-node-firewall.service ]] || fail "missing systemd units"
-[[ -r tools/site_generator.py ]] || fail "missing site generator"
+[[ -r tools/site_generator.sh && -r tools/site-generator/design.awk ]] || fail "missing site generator"
 ok "repository layout"
 
-if grep -RInE 'https?://fonts\.(googleapis|gstatic)\.com|@import[[:space:]]+url' tools/site_generator.py assets/site; then
+if grep -RInE 'https?://fonts\.(googleapis|gstatic)\.com|@import[[:space:]]+url' tools/site-generator/design.awk assets/site; then
     fail "generated site source contains a remote font dependency"
 fi
 ok "no remote font dependency"
@@ -110,7 +107,7 @@ for license in assets/fonts/OFL-*.txt; do
 done
 ok "local fonts and licenses"
 
-for executable in install.sh src/bin/rw-node src/scripts/rw-node-* tests/test-*.sh; do
+for executable in install.sh tools/site_generator.sh src/bin/rw-node src/scripts/rw-node-* tests/test-*.sh; do
     [[ -x $executable ]] || fail "not executable: $executable"
 done
 ok "executable modes"

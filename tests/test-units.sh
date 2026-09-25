@@ -5,14 +5,6 @@ ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
 TEMP_ROOT=$(mktemp -d "${RW_TEST_TMPDIR:-${TMPDIR:-/tmp}}/rw-node-tests.XXXXXX")
 trap 'rm -rf "$TEMP_ROOT"' EXIT
 
-# Git for Windows exposes python.exe but usually not python3.exe.
-if ! python3 -c 'raise SystemExit(0)' >/dev/null 2>&1; then
-    mkdir -p "$TEMP_ROOT/bin"
-    printf '#!/usr/bin/env bash\nexec "%s" "$@"\n' "${RW_PYTHON:-python}" >"$TEMP_ROOT/bin/python3"
-    chmod +x "$TEMP_ROOT/bin/python3"
-    PATH="$TEMP_ROOT/bin:$PATH"
-fi
-
 export RW_CONFIG_DIR="$TEMP_ROOT/etc/rw-node-installer"
 export RW_CONFIG_FILE="$RW_CONFIG_DIR/config.env"
 export RW_STATE_DIR="$TEMP_ROOT/var/lib/rw-node-installer"
@@ -25,7 +17,7 @@ export RW_CADDYFILE="$TEMP_ROOT/etc/caddy/Caddyfile"
 export RW_CADDY_STORAGE="$TEMP_ROOT/var/lib/caddy/storage"
 export RW_CADDY_LOG_DIR="$TEMP_ROOT/var/log/caddy"
 export RW_INSTALL_DIR="$ROOT"
-export RW_SITE_GENERATOR="$ROOT/tools/site_generator.py"
+export RW_SITE_GENERATOR="$ROOT/tools/site_generator.sh"
 export RW_LOCK_FILE="$TEMP_ROOT/run/lock"
 export RW_RUNTIME_DIR="$TEMP_ROOT/run/rw-node-installer"
 export RW_TEST_IPV6_AVAILABLE=true
@@ -109,15 +101,21 @@ assert rw_ip_in_list 203.0.113.25 '203.0.113.0/24,2001:db8::1'
 assert rw_validate_email admin@example.com
 assert rw_validate_email ''
 ! rw_validate_email not-an-email || fail "invalid email accepted"
-valid_secret=$(python3 - <<'PY'
-import base64, json
-payload = {key: f"test-{key}" for key in ("caCertPem", "jwtPublicKey", "nodeCertPem", "nodeKeyPem")}
-print(base64.b64encode(json.dumps(payload).encode()).decode().rstrip("="))
-PY
-)
+valid_secret=$(printf '%s' '{"caCertPem":"test-ca","jwtPublicKey":"test-jwt","nodeCertPem":"test-cert","nodeKeyPem":"test-key"}' | base64 | tr -d '\n=')
 assert rw_validate_secret "$valid_secret"
 ! rw_validate_secret short || fail "short secret accepted"
 ! rw_validate_secret '0123456789abcdef' || fail "non-Remnawave secret accepted"
+secret_json='{"caCertPem":"ca","jwtPublicKey":"jwt","nodeCertPem":"cert","nodeKeyPem":"key"}'
+for invalid_json in '{}' '[]' "$secret_json$secret_json" \
+    '{"caCertPem":null,"jwtPublicKey":"jwt","nodeCertPem":"cert","nodeKeyPem":"key"}' \
+    '{"caCertPem":"   ","jwtPublicKey":"jwt","nodeCertPem":"cert","nodeKeyPem":"key"}'; do
+    invalid_secret=$(printf '%s' "$invalid_json" | base64 | tr -d '\n')
+    ! rw_validate_secret "$invalid_secret" || fail "invalid secret JSON accepted"
+done
+invalid_secret=$(printf '%s\000' "$secret_json" | base64 | tr -d '\n')
+! rw_validate_secret "$invalid_secret" || fail "NUL in secret JSON accepted"
+invalid_secret=$(printf '{"caCertPem":"\377","jwtPublicKey":"jwt","nodeCertPem":"cert","nodeKeyPem":"key"}' | base64 | tr -d '\n')
+! rw_validate_secret "$invalid_secret" || fail "invalid UTF-8 in secret accepted"
 printf 'OK: validators\n'
 
 for port in 1 2222 32456 65535; do
@@ -405,7 +403,9 @@ assert test -x "$RW_INSTALL_DIR/bin/rw-node"
 assert test -r "$RW_INSTALL_DIR/lib/common.sh"
 assert test -x "$RW_INSTALL_DIR/scripts/rw-node-healthcheck"
 assert test -r "$RW_INSTALL_DIR/systemd/rw-node-firewall.service"
-assert test -r "$RW_INSTALL_DIR/site_generator.py"
+assert test -r "$RW_INSTALL_DIR/site_generator.sh"
+assert test -r "$RW_INSTALL_DIR/site-generator/design.awk"
+assert test ! -e "$RW_INSTALL_DIR/site_generator.py"
 assert test -x "$RW_SBIN_DIR/rw-node"
 printf 'OK: repository-to-runtime bundle layout\n'
 

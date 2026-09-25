@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Procedural generator of long-form Russian one-page websites.
+"""Frozen pre-port reference, used only by development/regression tests.
 
 Ordinary usage:
     python tools/site_generator.py
@@ -2769,7 +2769,7 @@ class SiteGenerator:
         elif family == "data-first":
             inner = (
                 "<div class='hero-data-layout'>"
-                f"<div class='hero-data-top'>{metrics}<div class='hero-data-code'><span>DNA</span><b>{self.dna['parameter_group_count']}</b><small>групп параметров</small></div></div>"
+                f"<div class='hero-data-top'>{metrics}<div class='hero-data-code'><span>Направление</span><b>{esc(self.dna['industry_label'])}</b><small>{esc(self.dna['brand']['organization_type'])}</small></div></div>"
                 f"<div class='hero-data-main'><div><h1>{headline_markup}</h1>{actions}</div><div class='hero-data-copy'><p>{esc(copy)}</p><p class='mono-note'>{esc(self.pick(self.industry['technologies']))} / {esc(self.pick(self.industry['methods']))}</p></div></div>"
                 f"<div class='hero-data-art'>{art}</div>"
                 "</div>"
@@ -3848,7 +3848,7 @@ class SiteGenerator:
                 f"<div class='footer-top'>{brand}<p>{esc(self.dna['brand']['descriptor'])}</p>{return_link}</div>"
                 f"<div class='footer-columns'><div><span>Разделы</span>{nav_links}</div>"
                 f"<div><span>Принципы</span>{''.join(f'<b>{esc(x)}</b>' for x in self.industry['principles'][:3])}</div>"
-                f"<div><span>Информация</span><b>{esc(self.dna['industry_label'])}</b><b>{esc(self.dna['art_direction'])}</b><b>{year}</b></div></div>{large}"
+                f"<div><span>Информация</span><b>{esc(self.dna['industry_label'])}</b><b>{esc(self.dna['brand']['organization_type'])}</b><b>{year}</b></div></div>{large}"
             )
         elif family == "giant-wordmark":
             body = (
@@ -3865,10 +3865,10 @@ class SiteGenerator:
             )
         elif family == "technical":
             rows = "".join(f"<div><span>{key}</span><b>{esc(value)}</b></div>" for key, value in [
-                ("DNA", self.dna["signature"][:8]),
-                ("SYSTEM", self.dna["archetype"]),
-                ("MODE", self.dna["palette"]["mode"]),
-                ("GRID", f"{self.dna['layout']['columns']} col"),
+                ("Направление", self.dna["industry_label"]),
+                ("Подход", self.industry["principles"][0]),
+                ("Метод", self.industry["methods"][0]),
+                ("Год", year),
             ])
             body = (
                 f"<div class='footer-technical'><div>{brand}<p>{esc(self.dna['brand']['descriptor'])}</p></div>"
