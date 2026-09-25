@@ -18,7 +18,7 @@
 - официальный Docker Engine и Compose plugin;
 - официальный стабильный Caddy;
 - `remnawave/node:latest` в host network с `NET_ADMIN` для Node Plugins;
-- уникальный сайт из `tools/site_generator.sh` (Bash + штатный awk), локальные WOFF2-шрифты без Google Fonts; Python на ноде не требуется;
+- уникальный сайт из `tools/site_generator.sh` (Bash + штатный awk), локальные WOFF2-шрифты без Google Fonts; генератор не требует Python;
 - сертификат ACME HTTP-01 на Caddy и его безопасная копия в `/etc/ssl/hysteria`;
 - отдельная таблица `inet rw_node_guard`, не удаляющая таблицы Remnawave Plugins;
 - SSH `22/tcp` только от IP панели и списка администраторов;
@@ -66,7 +66,7 @@ rw-node-installer/
 идентификатор коммита с успешно пройденным workflow `verify`.
 
 ```bash
-apt-get -o DPkg::Lock::Timeout=600 update && apt-get -o DPkg::Lock::Timeout=600 install -y ca-certificates curl tar && (COMMIT_SHA=064a475285674679e7bbaacf0822a93483e0c524; RW_BOOTSTRAP_FILE=$(mktemp) && trap 'rm -f -- "$RW_BOOTSTRAP_FILE"' EXIT && curl -fsSL "https://raw.githubusercontent.com/penatov/rw-node-installer/${COMMIT_SHA}/install.sh" -o "$RW_BOOTSTRAP_FILE" && env RW_INSTALLER_REPO=https://github.com/penatov/rw-node-installer RW_INSTALLER_REF="$COMMIT_SHA" bash "$RW_BOOTSTRAP_FILE")
+apt-get -o DPkg::Lock::Timeout=600 update && apt-get -o DPkg::Lock::Timeout=600 install -y ca-certificates curl tar && (COMMIT_SHA=70c67fdd31460754160d54389219b2c283cadbba; RW_BOOTSTRAP_FILE=$(mktemp) && trap 'rm -f -- "$RW_BOOTSTRAP_FILE"' EXIT && curl -fsSL "https://raw.githubusercontent.com/penatov/rw-node-installer/${COMMIT_SHA}/install.sh" -o "$RW_BOOTSTRAP_FILE" && env RW_INSTALLER_REPO=https://github.com/penatov/rw-node-installer RW_INSTALLER_REF="$COMMIT_SHA" bash "$RW_BOOTSTRAP_FILE")
 ```
 
 Для обновления только firewall на уже установленной ноде, из root-shell:
@@ -74,7 +74,7 @@ apt-get -o DPkg::Lock::Timeout=600 update && apt-get -o DPkg::Lock::Timeout=600 
 ```bash
 (
   set -e
-  COMMIT_SHA=064a475285674679e7bbaacf0822a93483e0c524
+  COMMIT_SHA=70c67fdd31460754160d54389219b2c283cadbba
   RW_BOOTSTRAP_FILE=$(mktemp)
   trap 'rm -f -- "$RW_BOOTSTRAP_FILE"' EXIT
   curl -fsSL "https://raw.githubusercontent.com/penatov/rw-node-installer/${COMMIT_SHA}/install.sh" -o "$RW_BOOTSTRAP_FILE"
@@ -157,7 +157,10 @@ GitHub Actions дополнительно запускает ShellCheck, син�
 
 На ноде генерация выполняется через Bash, штатный `awk` (`mawk` на Debian) и coreutils.
 Проверки IP/CIDR, ключа панели, DNS и настройка сетевых очередей также не требуют Python.
-Установщик больше не устанавливает `python3`; уже установленные пакеты не удаляет.
+Явная зависимость нашего кода от `python3` удалена; уже установленные пакеты не удаляются.
+Однако системный `unattended-upgrades` по-прежнему устанавливает Python как свою зависимость:
+автообновления безопасности сохранены. Это перенос генератора и нашего runtime без Python,
+а не гарантия отсутствия Python среди системных пакетов.
 
 Сохранены все семейства шаблонов, CSS, правила выбора и сочетания секций. Служебные
 надписи `DNA / SYSTEM / MODE / GRID` заменены обычным содержимым подвала. Один seed
