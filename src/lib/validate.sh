@@ -70,10 +70,9 @@ rw_validate_secret() (
     [[ ${#value} -ge 16 && $value =~ ^[A-Za-z0-9_+/-]+={0,2}$ ]] || return 1
     while ((${#value} % 4)); do value+='='; done
     printf '%s' "$value" | tr '_-' '/+' | base64 --decode 2>/dev/null |
+        LC_ALL=C awk 'index($0, sprintf("%c", 0)) { exit 1 } { print }' |
         iconv -f UTF-8 -t UTF-8 2>/dev/null | jq -e -R -s '
-        # jq 1.6 otherwise truncates fromjson input at a raw NUL byte.
-        if index("\u0000") != null then error("NUL in JSON") else fromjson end |
-        type == "object" and
+        fromjson | type == "object" and
         all(.caCertPem, .jwtPublicKey, .nodeCertPem, .nodeKeyPem;
             type == "string" and test("\\S"))' >/dev/null 2>&1
 )
