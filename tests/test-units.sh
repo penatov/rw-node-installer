@@ -83,6 +83,26 @@ RW_APT_LOCK_TIMEOUT=37 rw_apt_get install -y example-package
 unset -f apt-get
 printf 'OK: APT lock waiting\n'
 
+# Execute only the mask-building prelude; never write NIC/sysfs settings.
+for cpu_count in 4 31 32 33 64 65 256 300; do
+    case $cpu_count in
+        4) expected_mask=0000000f ;;
+        31) expected_mask=7fffffff ;;
+        32) expected_mask=ffffffff ;;
+        33) expected_mask=00000001,ffffffff ;;
+        64) expected_mask=ffffffff,ffffffff ;;
+        65) expected_mask=00000001,ffffffff,ffffffff ;;
+        *) expected_mask=ffffffff,ffffffff,ffffffff,ffffffff,ffffffff,ffffffff,ffffffff,ffffffff ;;
+    esac
+    actual_mask=$(RW_TEST_CPUS=$cpu_count bash -c '
+        nproc() { printf "%s" "$RW_TEST_CPUS"; }
+        source /dev/stdin
+        printf "%s" "$mask"
+    ' < <(sed '/^mapfile /,$d' "$ROOT/src/scripts/rw-node-nic-tune"))
+    [[ $actual_mask == "$expected_mask" ]] || fail "NIC CPU mask: $cpu_count"
+done
+printf 'OK: native NIC masks (4..300 CPUs)\n'
+
 assert rw_validate_domain node.example.com
 assert rw_validate_domain xn--e1afmkfd.xn--p1ai
 ! rw_validate_domain localhost || fail "single-label domain accepted"
