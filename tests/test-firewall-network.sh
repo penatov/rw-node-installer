@@ -90,7 +90,7 @@ for panel_family in 4 6; do
             source src/lib/validate.sh
             # shellcheck source=../src/lib/firewall.sh
             source src/lib/firewall.sh
-            PANEL_IP=$panel ADMIN_IPS=$admin NODE_PORT=$api_port
+            export PANEL_IP=$panel ADMIN_IPS=$admin NODE_PORT=$api_port
             rw_render_firewall "$work/firewall.nft"
         )
         for _ in 1 2; do
