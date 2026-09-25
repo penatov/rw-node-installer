@@ -25,6 +25,13 @@ if grep -RInE 'python[0-9]*([[:space:]]|$)' src tools/site_generator.sh tools/si
     fail "Python runtime dependency reintroduced"
 fi
 ok "no Python dependency in node runtime"
+if find src tools tests -type f \( -name '*.py' -o -name '*.pyc' \) | grep -q .; then
+    fail "removed interpreter source or bytecode reintroduced"
+fi
+if grep -nE 'python[0-9]*[[:space:]]' .github/workflows/*.yml; then
+    fail "CI invokes the removed interpreter"
+fi
+ok "repository and CI use native tests"
 
 [[ -x src/bin/rw-node ]] || fail "missing runtime entry point"
 [[ -r src/lib/common.sh ]] || fail "missing runtime libraries"

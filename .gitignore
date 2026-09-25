@@ -1,7 +1,5 @@
 *.log
 *.tmp
 *.bak
-__pycache__/
-.pytest_cache/
 index.html
 test-output/

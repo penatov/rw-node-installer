@@ -3,5 +3,6 @@
 *.service text eol=lf
 *.timer text eol=lf
 *.nft text eol=lf
-*.py text eol=lf
+*.awk text eol=lf
+*.tsv text eol=lf
 *.woff2 binary

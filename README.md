@@ -34,7 +34,7 @@
 ```text
 rw-node-installer/
 ├── src/                 runtime: CLI, shell-модули, systemd units и служебные scripts
-├── tools/               Bash/awk-генератор и инструмент проверки переноса
+├── tools/               самостоятельный Bash/awk-генератор сайта
 ├── assets/              локальные шрифты и статические файлы сайта
 ├── docs/                архитектура, эксплуатация и рекомендации профиля
 ├── tests/               статические и unit-проверки
@@ -148,10 +148,14 @@ nftables надёжно скрывает административные пор
 bash tests/test-static.sh
 bash tests/test-units.sh
 bash tests/test-no-python.sh
+bash tests/test-site-generator.sh
+bash tests/test-ip-parser.sh
 bash tools/site_generator.sh --audit 100 --seed repository-audit
 ```
 
 GitHub Actions дополнительно запускает ShellCheck, синтаксическую проверку nftables, адаптацию Caddyfile и `docker compose config`.
+Тесты написаны на Bash/awk; сетевые проверки используют `socat` и `netcat-openbsd`
+только в CI, эти пакеты не добавляются на ноду.
 
 ### Генератор без Python
 

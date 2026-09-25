@@ -50,6 +50,11 @@ jobs:
       - name: Generator and validators without Python
         run: bash tests/test-no-python.sh
 
+      - name: Frozen generator and IP regression corpus
+        run: |
+          bash tests/test-site-generator.sh
+          bash tests/test-ip-parser.sh
+
       - name: Run Linux integration checks
         run: bash tests/test-linux-integration.sh
 
@@ -62,16 +67,14 @@ jobs:
       - name: Install validators
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends shellcheck nftables jq mawk
+          sudo apt-get install -y --no-install-recommends shellcheck nftables jq mawk socat netcat-openbsd
 
       - name: Static and generator checks
         run: |
           bash tests/test-static.sh
           bash tools/site_generator.sh --audit 100 --seed repository-audit
-          RW_AWK=mawk python3 tests/test-site-generator.py
-          RW_AWK=mawk python3 tests/test-ip-parser.py
-          python3 tools/port_site_generator.py
-          git diff --exit-code -- tools/site-generator/design.awk
+          bash tests/test-site-generator.sh
+          bash tests/test-ip-parser.sh
 
       - name: Render configurations
         env:
@@ -82,7 +85,7 @@ jobs:
         run: sudo nft --check --file test-output/firewall.nft
 
       - name: Verify TCP RST, allowlists and UDP in isolated IPv4/IPv6 networks
-        run: sudo python3 tests/test-firewall-network.py
+        run: sudo bash tests/test-firewall-network.sh
 
       - name: Exercise nftables idempotency in an isolated network namespace
         run: |
