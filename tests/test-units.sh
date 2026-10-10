@@ -435,7 +435,10 @@ if [[ ${OSTYPE:-} == linux* ]]; then
         DOMAIN=node.example; NODE_PORT=32456; PANEL_IP=192.0.2.1
         rw_print_profile_guidance true >"$PROFILE_TEST_STDOUT"
     '
-    script --quiet --return --command "$tty_command" "$TEMP_ROOT/tty-guidance" >/dev/null
+    if ! SHELL=/bin/bash script --quiet --return --command "$tty_command" "$TEMP_ROOT/tty-guidance" >/dev/null; then
+        cat "$TEMP_ROOT/tty-guidance" >&2
+        fail 'TTY profile command failed'
+    fi
     ! grep -Fq 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' "$PROFILE_TEST_STDOUT" || fail 'private key leaked to redirected stdout'
     grep -Fq 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' "$TEMP_ROOT/tty-guidance" || fail 'private key missing in TTY'
 fi
