@@ -138,5 +138,17 @@ jobs:
         working-directory: test-output
         run: docker compose config --quiet
 
+      - name: Validate generated Config Profile with actual node Xray
+        run: |
+          mkdir -p test-output/profile-cert
+          openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes \
+            -keyout test-output/profile-cert/privkey.pem \
+            -out test-output/profile-cert/fullchain.pem \
+            -days 2 -subj /CN=node.example
+          docker run --rm --entrypoint xray \
+            -v "$PWD/test-output/config-profile.json:/tmp/config-profile.json:ro" \
+            -v "$PWD/test-output/profile-cert:/etc/ssl/hysteria:ro" \
+            remnawave/node:latest run -test -config /tmp/config-profile.json
+
       - name: Exercise certificate synchronization boundary
         run: sudo bash tests/test-linux-integration.sh

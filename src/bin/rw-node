@@ -49,7 +49,9 @@ Install options:
   --acme-email EMAIL
 Pass SECRET_KEY through RW_SECRET_KEY for non-interactive installation.
 Use RW_NODE_PORT or --node-port to select a port without the interactive prompt.
-Use RW_CADDY_SOURCE=github to bypass Cloudsmith using a pinned official Caddy DEB.
+Caddy defaults to a verified official GitHub DEB; Cloudsmith is not required.
+Use RW_CADDY_SOURCE=apt only to opt into the Cloudsmith APT repository.
+Interactive installation ends with the full Config Profile (private key, TTY only).
 EOF
 }
 

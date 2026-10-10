@@ -16,7 +16,8 @@ printf '%s\n' '# Caddy stable' \
     'deb [signed-by=/usr/share/keyrings/caddy-stable-archive-keyring.gpg] https://dl.cloudsmith.io/public/caddy/stable/deb/debian any-version main' >"$RW_CADDY_APT_SOURCE_FILE"
 RW_CADDY_SOURCE=apt rw_prepare_caddy_source
 [[ -f $RW_CADDY_APT_SOURCE_FILE ]] || fail 'APT default changed source'
-RW_CADDY_SOURCE=github rw_prepare_caddy_source
+unset RW_CADDY_SOURCE
+rw_prepare_caddy_source
 [[ ! -e $RW_CADDY_APT_SOURCE_FILE && -s $WORK/backup ]] || fail 'source not preserved/disabled'
 RW_CADDY_SOURCE=github rw_prepare_caddy_source
 cp "$WORK/backup" "$RW_CADDY_APT_SOURCE_FILE"

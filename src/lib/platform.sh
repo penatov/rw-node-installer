@@ -36,7 +36,7 @@ rw_apt_install_base() {
 
 rw_prepare_caddy_source() {
     local source_file=${RW_CADDY_APT_SOURCE_FILE:-/etc/apt/sources.list.d/caddy-stable.list} disabled
-    case ${RW_CADDY_SOURCE:-apt} in
+    case ${RW_CADDY_SOURCE:-github} in
         apt) return 0 ;;
         github) ;;
         *) rw_die "RW_CADDY_SOURCE должен быть apt или github." ;;
@@ -133,13 +133,13 @@ rw_install_runtime_packages() {
     export DEBIAN_FRONTEND=noninteractive
     rw_log "Подключаю официальный репозиторий Docker и источник Caddy..."
     rw_install_docker_repository
-    if [[ ${RW_CADDY_SOURCE:-apt} == github ]]; then
+    if [[ ${RW_CADDY_SOURCE:-github} == github ]]; then
         rw_prepare_caddy_source
     else
         rw_install_caddy_repository
     fi
     rw_apt_get update
-    if [[ ${RW_CADDY_SOURCE:-apt} == github ]]; then
+    if [[ ${RW_CADDY_SOURCE:-github} == github ]]; then
         rw_install_caddy_github
         rw_warn "Caddy установлен с GitHub: новые версии не будут поступать через Cloudsmith, пока его APT source отключён."
     fi

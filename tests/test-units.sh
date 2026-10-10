@@ -398,7 +398,7 @@ printf 'OK: custom API port persistence, firewall, node environment and occupied
 
 cat >"$RW_PROFILE_VALUES_FILE" <<'EOF'
 REALITY X25519 output:
-PrivateKey: private-value-must-not-leak
+PrivateKey: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
 Password (PublicKey): public-value-for-reality
 Hash32: irrelevant-vless-encryption-value
 
@@ -410,9 +410,38 @@ guidance=$(rw_print_profile_guidance)
 grep -Fq 'Password (PublicKey): public-value-for-reality' <<<"$guidance" || \
     fail "current Xray public key label was not printed"
 grep -Fq '0123456789abcdef' <<<"$guidance" || fail "short ID was not printed"
-! grep -Fq 'private-value-must-not-leak' <<<"$guidance" || fail "REALITY private key leaked"
+! grep -Fq 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' <<<"$guidance" || fail "REALITY private key leaked"
 ! grep -Fq 'irrelevant-vless-encryption-value' <<<"$guidance" || fail "irrelevant Hash32 was printed"
 printf 'OK: safe current-Xray REALITY guidance\n'
+
+rw_write_profile_example
+jq -e --arg domain "$DOMAIN" '
+    .inbounds[0].streamSettings.realitySettings as $r |
+    $r.privateKey == "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" and
+    $r.serverNames == [$domain] and $r.target == "127.0.0.1:8443" and
+    $r.shortIds == ["0123456789abcdef"] and
+    .inbounds[1].streamSettings.hysteriaSettings.masquerade.url == ("https://" + $domain + ":8443/") and
+    .inbounds[1].settings.clients == [] and .dns.queryStrategy == "UseIP"
+' "$RW_PROFILE_JSON_FILE" >/dev/null || fail 'complete profile values'
+original_profile=$(sha256sum "$RW_PROFILE_JSON_FILE")
+rw_write_profile_example
+[[ $(sha256sum "$RW_PROFILE_JSON_FILE") == "$original_profile" ]] || fail 'profile regeneration changed keys'
+if [[ ${OSTYPE:-} == linux* ]]; then
+    [[ $(stat -c '%a' "$RW_PROFILE_JSON_FILE") == 600 ]] || fail 'profile permissions'
+    export PROFILE_TEST_ROOT="$ROOT" PROFILE_TEST_STDOUT="$TEMP_ROOT/public-guidance"
+    printf -v tty_command '%q ' bash -c '
+        source "$PROFILE_TEST_ROOT/src/lib/common.sh"
+        source "$PROFILE_TEST_ROOT/src/lib/remnawave.sh"
+        DOMAIN=node.example; NODE_PORT=32456; PANEL_IP=192.0.2.1
+        rw_print_profile_guidance true >"$PROFILE_TEST_STDOUT"
+    '
+    script --quiet --return --command "$tty_command" "$TEMP_ROOT/tty-guidance" >/dev/null
+    ! grep -Fq 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' "$PROFILE_TEST_STDOUT" || fail 'private key leaked to redirected stdout'
+    grep -Fq 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' "$TEMP_ROOT/tty-guidance" || fail 'private key missing in TTY'
+fi
+noninteractive_guidance=$(rw_finish_profile_guidance 2>/dev/null)
+! grep -Fq 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' <<<"$noninteractive_guidance" || fail 'automatic private key leak without TTY'
+printf 'OK: complete root-only profile, stable keys and terminal-only private output\n'
 
 RW_INSTALL_DIR="$TEMP_ROOT/installed-bundle"
 RW_INSTALL_STAGING_PARENT="$TEMP_ROOT/staging"
@@ -435,6 +464,7 @@ if [[ -n ${RW_TEST_OUTPUT:-} ]]; then
     cp "$RW_CADDYFILE" "$RW_TEST_OUTPUT/Caddyfile"
     cp "$RW_PROJECT_DIR/docker-compose.yml" "$RW_TEST_OUTPUT/docker-compose.yml"
     cp "$RW_PROJECT_DIR/node.env" "$RW_TEST_OUTPUT/node.env"
+    cp "$RW_PROFILE_JSON_FILE" "$RW_TEST_OUTPUT/config-profile.json"
 fi
 
 printf 'Unit checks passed.\n'

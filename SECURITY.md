@@ -12,7 +12,7 @@
 - Публично разрешены только TCP 80/443 и UDP 443.
 - Проект не выполняет глобальный `flush ruleset` и не удаляет таблицы Node Plugins.
 - Секрет Node хранится в root-only `node.env` и не печатается установщиком.
-- REALITY private key не попадает в обычный stdout и показывается только явной TTY-командой.
+- REALITY private key не попадает в обычный stdout. Он показывается в TTY в конце интерактивной установки (по запросу владельца) либо явной командой `profile-guidance --show-private-key`. Полный профиль хранится в root-only `config-profile.json` с mode `0600`. Запись терминальной сессии и её скриншоты могут содержать ключ.
 - Hysteria private key хранится с mode `0600`.
 - Caddy admin API отключён; root не читает Caddy-owned certificate paths напрямую.
 - Firewall становится постоянным только после новой проверенной SSH-сессии и явного `yes`.

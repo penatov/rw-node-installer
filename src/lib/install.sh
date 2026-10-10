@@ -210,6 +210,6 @@ rw_install_command() {
     if ! rw_diagnose_command; then
         rw_warn "Установка завершена, но диагностика нашла ошибки. Выполните: rw-node diagnose"
     fi
-    rw_print_profile_guidance
+    rw_finish_profile_guidance
     printf '\nУправление: rw-node status | diagnose | regenerate-site | update-node | firewall\n'
 }

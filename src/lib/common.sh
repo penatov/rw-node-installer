@@ -25,6 +25,7 @@ RW_FIREWALL_FILE="${RW_CONFIG_DIR}/firewall.nft"
 RW_FIREWALL_CANDIDATE="${RW_FIREWALL_CANDIDATE:-${RW_RUNTIME_DIR}/firewall-candidate.nft}"
 RW_FIREWALL_PENDING="${RW_FIREWALL_PENDING:-${RW_RUNTIME_DIR}/firewall-pending}"
 RW_PROFILE_VALUES_FILE="${RW_PROFILE_VALUES_FILE:-${RW_STATE_DIR}/profile-values.txt}"
+RW_PROFILE_JSON_FILE="${RW_PROFILE_JSON_FILE:-${RW_STATE_DIR}/config-profile.json}"
 RW_OWNER_MARKER="# Managed by rw-node-installer"
 
 if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then

@@ -102,6 +102,67 @@ rw_ensure_profile_values() {
     mv -f "$tmp" "$RW_PROFILE_VALUES_FILE"
 }
 
+rw_write_profile_example() (
+    local private_key short_ids tmp
+    rw_ensure_profile_values
+    private_key=$(sed -nE 's/^[[:space:]]*[Pp]rivate[[:space:]_-]*[Kk]ey[[:space:]]*:[[:space:]]*([^[:space:]]+)[[:space:]]*$/\1/p' "$RW_PROFILE_VALUES_FILE")
+    [[ $private_key =~ ^[A-Za-z0-9_-]{43}$ ]] || rw_die "Не удалось прочитать REALITY private key из $RW_PROFILE_VALUES_FILE."
+    short_ids=$(awk '/^Short IDs:/ { ids=1; next } ids && NF { print $1 }' "$RW_PROFILE_VALUES_FILE" | \
+        jq -Rsc 'split("\n") | map(select(length > 0))')
+    jq -e 'length > 0 and all(.[]; test("^([0-9a-fA-F]{2}){1,8}$"))' \
+        <<<"$short_ids" >/dev/null || rw_die "Некорректные short IDs в $RW_PROFILE_VALUES_FILE."
+    install -d -m 0700 "$RW_STATE_DIR"
+    tmp=$(rw_mktemp_near "$RW_PROFILE_JSON_FILE")
+    trap 'rm -f -- "$tmp"' EXIT
+    # Do not put private keys in jq's argv/environment (visible to process tools).
+    # --rawfile reads the already protected root-only file instead.
+    jq -n --arg domain "$DOMAIN" --rawfile values "$RW_PROFILE_VALUES_FILE" \
+        --argjson ids "$short_ids" '
+        ($values | capture("(?im)^\\s*private[ _-]*key\\s*:\\s*(?<key>[A-Za-z0-9_-]{43})\\s*$").key) as $key |
+        {
+          log: {loglevel: "warning"},
+          dns: {servers: [{address: "https://dns.google/dns-query", skipFallback: false}], queryStrategy: "UseIP"},
+          inbounds: [
+            {
+              tag: ("VLESS_REALITY_" + $domain + "_443"), port: 443, listen: "0.0.0.0", protocol: "vless",
+              settings: {clients: [], decryption: "none"},
+              sniffing: {enabled: true, destOverride: ["http", "tls", "quic"]},
+              streamSettings: {
+                network: "raw", security: "reality",
+                realitySettings: {show: false, xver: 0, target: "127.0.0.1:8443", serverNames: [$domain], privateKey: $key, shortIds: $ids}
+              }
+            },
+            {
+              tag: ("HYSTERIA2_" + $domain + "_443"), port: 443, listen: "0.0.0.0", protocol: "hysteria",
+              settings: {clients: [], version: 2},
+              sniffing: {enabled: true, destOverride: ["http", "tls", "quic"]},
+              streamSettings: {
+                network: "hysteria", security: "tls",
+                tlsSettings: {alpn: ["h3"], serverName: $domain, certificates: [{keyFile: "/etc/ssl/hysteria/privkey.pem", certificateFile: "/etc/ssl/hysteria/fullchain.pem"}]},
+                hysteriaSettings: {version: 2, masquerade: {type: "proxy", url: ("https://" + $domain + ":8443/"), rewriteHost: true, insecure: false}, udpIdleTimeout: 60}
+              }
+            }
+          ],
+          outbounds: [{tag: "DIRECT", protocol: "freedom"}, {tag: "BLOCK", protocol: "blackhole"}],
+          routing: {rules: [{type: "field", ip: ["geoip:private"], outboundTag: "BLOCK"}, {type: "field", protocol: ["bittorrent"], outboundTag: "BLOCK"}]}
+        }' >"$tmp"
+    [[ -s $tmp ]] || rw_die "Не удалось сформировать Config Profile."
+    chmod 0600 "$tmp"
+    chown root:root "$tmp"
+    mv -f -- "$tmp" "$RW_PROFILE_JSON_FILE"
+)
+
+rw_finish_profile_guidance() {
+    rw_write_profile_example
+    # Ordinary stdout remains public, including under tee/log collectors.
+    if [[ -t 1 ]] && { : >/dev/tty; } 2>/dev/null; then
+        rw_print_profile_guidance true
+    else
+        rw_print_profile_guidance false
+        rw_warn "Нет интерактивного терминала: полный профиль с private key сохранён в $RW_PROFILE_JSON_FILE (0600)."
+    fi
+}
+
 rw_print_profile_guidance() {
     local show_private=${1:-false} safe_values
     rw_ensure_profile_values
@@ -135,7 +196,7 @@ Hysteria keyFile        : /etc/ssl/hysteria/privkey.pem
 В REALITY serverNames оставьте ${DOMAIN}; другие имена допустимы только если локальный
 Caddy действительно обслуживает для них валидный сертификат.
 Fingerprint (Firefox/QQ) задаётся в Host/клиенте и установщиком не меняется.
-Создайте отдельные REALITY privateKey/publicKey и shortIds для этой ноды.
+Для этой ноды уже созданы отдельные REALITY privateKey/publicKey и shortIds.
 Не вставляйте ключи в репозиторий или журналы.
 
 Публичные значения Xray и предложенные shortIds:
@@ -144,12 +205,17 @@ ${safe_values}
 В актуальном Xray значение "Password (PublicKey)" — это publicKey клиента REALITY.
 Hash32 относится к VLESS Encryption и для REALITY не используется.
 
-Private key сохранён только в root-файле ${RW_PROFILE_VALUES_FILE}.
-Для разового показа непосредственно в TTY: rw-node profile-guidance --show-private-key
+Исходные ключи и short IDs сохранены в root-файле ${RW_PROFILE_VALUES_FILE}.
+Готовый Config Profile с private key: ${RW_PROFILE_JSON_FILE} (root-only, 0600).
+Для повторного показа непосредственно в TTY: rw-node profile-guidance --show-private-key
+Профиль — основа для новой записи в панели, а не экспорт текущего профиля панели.
+clients заполняет Remnawave; fingerprint задайте в Host. Панель автоматически не меняется.
 EOF
     if [[ $show_private == true ]]; then
-        [[ -w /dev/tty ]] || rw_die "Private key можно показать только в интерактивном TTY."
-        printf '\nВНИМАНИЕ: не копируйте private key в логи или issue.\n' >/dev/tty
-        cat "$RW_PROFILE_VALUES_FILE" >/dev/tty
+        { : >/dev/tty; } 2>/dev/null || rw_die "Private key можно показать только в интерактивном TTY."
+        rw_write_profile_example
+        printf '\nВНИМАНИЕ: полный профиль ниже содержит REALITY private key. Не публикуйте его.\n' >/dev/tty
+        printf '\nГотовый Config Profile для вставки в панель:\n' >/dev/tty
+        cat "$RW_PROFILE_JSON_FILE" >/dev/tty
     fi
 }
