@@ -49,6 +49,7 @@ Install options:
   --acme-email EMAIL
 Pass SECRET_KEY through RW_SECRET_KEY for non-interactive installation.
 Use RW_NODE_PORT or --node-port to select a port without the interactive prompt.
+Use RW_CADDY_SOURCE=github to bypass Cloudsmith using a pinned official Caddy DEB.
 EOF
 }
 

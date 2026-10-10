@@ -25,6 +25,7 @@ rw_check_platform() {
 
 rw_apt_install_base() {
     export DEBIAN_FRONTEND=noninteractive
+    rw_prepare_caddy_source
     rw_log "Обновляю индекс APT и устанавливаю базовые зависимости..."
     rw_apt_get update
     rw_apt_get install -y --no-install-recommends \
@@ -32,6 +33,62 @@ rw_apt_install_base() {
         procps psmisc openssl dnsutils util-linux coreutils findutils kmod \
         systemd-timesyncd unattended-upgrades apt-transport-https openssh-server
 }
+
+rw_prepare_caddy_source() {
+    local source_file=${RW_CADDY_APT_SOURCE_FILE:-/etc/apt/sources.list.d/caddy-stable.list}
+    case ${RW_CADDY_SOURCE:-apt} in
+        apt) return 0 ;;
+        github) ;;
+        *) rw_die "RW_CADDY_SOURCE должен быть apt или github." ;;
+    esac
+    # A failed earlier installation leaves this source active. Disable it before
+    # the FIRST apt update, not just before installing the runtime packages.
+    [[ -e $source_file || -L $source_file ]] || return 0
+    [[ -f $source_file && ! -L $source_file ]] || rw_die "Небезопасный APT source: $source_file"
+    awk '
+        /^[[:space:]]*($|#)/ { next }
+        /^[[:space:]]*deb(-src)?[[:space:]]/ && /https:\/\/dl\.cloudsmith\.io\/public\/caddy\/stable\/deb\/debian([[:space:]]|$)/ { found=1; next }
+        { bad=1 }
+        END { exit !(found && !bad) }
+    ' "$source_file" || rw_die "В $source_file есть неизвестные записи; не отключаю их автоматически."
+    rw_backup_file "$source_file"
+    local disabled="${source_file}.disabled-$(date +%s)-$$"
+    [[ ! -e $disabled && ! -L $disabled ]] || rw_die "Backup уже существует: $disabled"
+    mv -- "$source_file" "$disabled"
+    rw_warn "Cloudsmith отключён для APT; исходный список сохранён: $disabled"
+}
+
+rw_install_caddy_github() (
+    # Fixed release and independently recorded digests: never execute a package
+    # just because an unverified checksum downloaded alongside it matches.
+    local version=2.11.7 arch digest installed work package
+    arch=$(dpkg --print-architecture)
+    case $arch in
+        amd64) digest=a22b914ffd1958da42bc7ab13b7b62c6100634e0798ab594891d2d61d53ba749 ;;
+        arm64) digest=ca8ae5a50439642d7672344b4ec64e47cbddf81beb5da302420a78522eb5a47e ;;
+        *) rw_die "Неподдерживаемая архитектура Caddy: $arch" ;;
+    esac
+    installed=$(dpkg-query -W -f='${Status} ${Version}' caddy 2>/dev/null || true)
+    if [[ $installed == 'install ok installed '* ]] && \
+       dpkg --compare-versions "${installed#install ok installed }" ge "$version"; then
+        rw_info "Caddy ${installed#install ok installed } уже установлен; downgrade не выполняется."
+        exit 0
+    fi
+    work=$(mktemp -d /tmp/rw-caddy-release.XXXXXX)
+    package="$work/caddy.deb"
+    trap 'rm -f -- "$package"; rmdir -- "$work"' EXIT
+    rw_log "Устанавливаю официальный Caddy ${version} с GitHub (SHA-256 закреплена)..."
+    curl -fL --proto '=https' --tlsv1.2 --connect-timeout 20 --max-time 300 --retry 3 \
+        "https://github.com/caddyserver/caddy/releases/download/v${version}/caddy_${version}_linux_${arch}.deb" \
+        -o "$package" || rw_die "Не удалось загрузить официальный пакет Caddy с GitHub."
+    printf '%s  %s\n' "$digest" "$package" | sha256sum --check --status || \
+        rw_die "SHA-256 пакета Caddy не совпадает. Установка запрещена."
+    [[ $(dpkg-deb -f "$package" Package) == caddy && \
+       $(dpkg-deb -f "$package" Architecture) == "$arch" && \
+       $(dpkg-deb -f "$package" Version) == "$version" ]] || \
+        rw_die "Метаданные DEB-пакета Caddy не соответствуют ожидаемым."
+    rw_apt_get install -y --no-install-recommends "$package"
+)
 
 rw_install_docker_repository() {
     local arch source_file key_file key_tmp source_tmp
@@ -74,10 +131,18 @@ rw_install_caddy_repository() {
 
 rw_install_runtime_packages() {
     export DEBIAN_FRONTEND=noninteractive
-    rw_log "Подключаю официальные репозитории Docker и Caddy..."
+    rw_log "Подключаю официальный репозиторий Docker и источник Caddy..."
     rw_install_docker_repository
-    rw_install_caddy_repository
+    if [[ ${RW_CADDY_SOURCE:-apt} == github ]]; then
+        rw_prepare_caddy_source
+    else
+        rw_install_caddy_repository
+    fi
     rw_apt_get update
+    if [[ ${RW_CADDY_SOURCE:-apt} == github ]]; then
+        rw_install_caddy_github
+        rw_warn "Caddy установлен с GitHub: новые версии не будут поступать через Cloudsmith, пока его APT source отключён."
+    fi
     rw_apt_get install -y --no-install-recommends \
         docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin caddy
     if ! systemctl enable --now docker.service; then
