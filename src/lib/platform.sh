@@ -35,7 +35,7 @@ rw_apt_install_base() {
 }
 
 rw_prepare_caddy_source() {
-    local source_file=${RW_CADDY_APT_SOURCE_FILE:-/etc/apt/sources.list.d/caddy-stable.list}
+    local source_file=${RW_CADDY_APT_SOURCE_FILE:-/etc/apt/sources.list.d/caddy-stable.list} disabled
     case ${RW_CADDY_SOURCE:-apt} in
         apt) return 0 ;;
         github) ;;
@@ -52,7 +52,7 @@ rw_prepare_caddy_source() {
         END { exit !(found && !bad) }
     ' "$source_file" || rw_die "В $source_file есть неизвестные записи; не отключаю их автоматически."
     rw_backup_file "$source_file"
-    local disabled="${source_file}.disabled-$(date +%s)-$$"
+    disabled="${source_file}.disabled-$(date +%s)-$$"
     [[ ! -e $disabled && ! -L $disabled ]] || rw_die "Backup уже существует: $disabled"
     mv -- "$source_file" "$disabled"
     rw_warn "Cloudsmith отключён для APT; исходный список сохранён: $disabled"
